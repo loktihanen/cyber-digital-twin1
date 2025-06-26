@@ -7,16 +7,12 @@ import time
 import os
 
 # ======================== 2. CONNEXION NEO4J ======================
-
-
-uri = os.environ.get("NEO4J_URI")
-user = os.environ.get("NEO4J_USER")
-password = os.environ.get("NEO4J_PASSWORD")
+# Connexion Neo4j avec paramètres codés en dur
+uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+user = "neo4j"
+password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
 
 graph = Graph(uri, auth=(user, password))
-
-
-
 # ======================== 3. ONTOLOGIE RDF ========================
 rdf_graph = RDFGraph()
 UCO = Namespace("https://ontology.unifiedcyberontology.org/uco#")
