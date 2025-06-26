@@ -650,8 +650,84 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
 
 elif menu_choice == "🧪 Simulation & Digital Twin":
     st.header("🧪 Simulation avec le Jumeau Numérique")
-    st.info("Ce module permet de simuler des scénarios cyber via le graphe fusionné.")
-    st.warning("🔧 À implémenter : visualisation des impacts, scénarios what-if, propagation.")
+    st.info("Ce module permet de simuler des scénarios cyber à l'aide du graphe fusionné enrichi CVE_UNIFIED et des hôtes réels.")
+
+    import networkx as nx
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    # ======================== 1. EXTRACTION DU GRAPHE FUSIONNÉ ========================
+    @st.cache_data
+    def load_simulation_graph():
+        query = """
+        MATCH (h:Host)-[r:IMPACTS]->(s:Service)
+        RETURN h.name AS host, s.name AS service, r.weight AS weight
+        """
+        return graph_db.run(query).to_data_frame()
+
+    df = load_simulation_graph()
+
+    if df.empty:
+        st.warning("Aucune relation IMPACTS détectée. Lance d'abord la fusion et la propagation.")
+        st.stop()
+
+    # ======================== 2. CONSTRUCTION DU GRAPHE ========================
+    G = nx.DiGraph()
+    for _, row in df.iterrows():
+        host = row["host"]
+        service = row["service"]
+        weight = row.get("weight", 1.0)
+        G.add_edge(host, service, weight=weight)
+
+    st.markdown("### 🌐 Vue du graphe Host → Service")
+    pos = nx.spring_layout(G, seed=42)
+    plt.figure(figsize=(10, 6))
+    nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color='gray', node_size=1500, font_size=9)
+    edge_labels = nx.get_edge_attributes(G, 'weight')
+    nx.draw_networkx_edge_labels(G, pos, edge_labels={k: f"{v:.2f}" for k, v in edge_labels.items()}, font_color='red')
+    st.pyplot(plt.gcf())
+
+    # ======================== 3. SCÉNARIO DE SIMULATION ========================
+    st.subheader("🧪 Simulation What-If")
+    selected_host = st.selectbox("Choisir un hôte à simuler", list(G.nodes))
+    max_steps = st.slider("Nombre d'étapes de propagation", 1, 5, 2)
+    decay = st.slider("Facteur de dissipation", 0.1, 1.0, 0.6)
+
+    def simulate_propagation(G, start_node, decay, max_steps):
+        scores = {start_node: 1.0}
+        frontier = [start_node]
+        for _ in range(max_steps):
+            next_frontier = []
+            for node in frontier:
+                for neighbor in G.successors(node):
+                    edge_weight = G[node][neighbor].get('weight', 1.0)
+                    propagated_score = scores[node] * decay * edge_weight
+                    if propagated_score > scores.get(neighbor, 0):
+                        scores[neighbor] = propagated_score
+                        next_frontier.append(neighbor)
+            frontier = next_frontier
+        return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
+
+    if st.button("🚀 Lancer la simulation"):
+        results = simulate_propagation(G, selected_host, decay, max_steps)
+
+        st.markdown("### 📊 Résultats de la simulation")
+        df_results = pd.DataFrame(list(results.items()), columns=["Noeud", "Score de propagation"])
+        st.dataframe(df_results)
+
+        # ======================== 4. ANALYSE DE RISQUE ========================
+        st.subheader("🧯 Analyse du risque cumulé (pondéré)")
+        total_risk = sum(results.values())
+        st.metric("📛 Risque total estimé", f"{total_risk:.2f}")
+
+        # Bar chart
+        top_targets = list(results.keys())[:10]
+        plt.figure(figsize=(10, 5))
+        plt.barh(top_targets[::-1], [results[n] for n in top_targets[::-1]], color='crimson')
+        plt.xlabel("Score pondéré (propagation * CVSS)")
+        plt.title(f"Top 10 entités impactées depuis {selected_host}")
+        plt.gca().invert_yaxis()
+        st.pyplot(plt.gcf())
 
 # ======================== 🧠 INFOS DE FIN ========================
 st.sidebar.markdown("---")
