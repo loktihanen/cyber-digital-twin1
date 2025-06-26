@@ -121,13 +121,16 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     st.header("🧩 CSKG2 – Graphe basé sur les scans Nessus")
     st.info("Ce module permet d'explorer les vulnérabilités détectées dans ton infrastructure via les résultats Nessus (hosts, plugins, CVE).")
 
+    # 🎛️ Filtres
     st.sidebar.subheader("🎛️ Filtres spécifiques à KG2")
     selected_entities = st.sidebar.multiselect(
         "Types d'entités à afficher",
         ["Host", "Plugin", "CVE", "Service", "Port"],
         default=["Host", "Plugin", "CVE"]
     )
+    enable_physics = st.sidebar.toggle("Activer l'animation (physique)", value=True)
 
+    # 📥 Chargement des données
     @st.cache_data
     def load_kg2_data():
         query = """
@@ -150,6 +153,7 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
 
     st.subheader("🌐 Visualisation interactive (`pyvis`)")
 
+    # 📊 Construction du graphe
     G = nx.DiGraph()
     skipped = 0
     for _, row in df.iterrows():
@@ -174,7 +178,14 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
         "Service": "#ffaa00", "Port": "#9966cc"
     }
 
+    # 🌐 Configuration PyVis
     net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white")
+
+    if enable_physics:
+        net.barnes_hut()
+    else:
+        net.set_options('''var options = { "physics": { "enabled": false } }''')
+
     for node, data in G.nodes(data=True):
         net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
     for src, tgt, data in G.edges(data=True):
@@ -186,16 +197,17 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
         html = f.read()
     st.components.v1.html(html, height=700, scrolling=True)
 
-    # Statistiques
+    # 📈 Statistiques
     st.markdown("### 📊 Statistiques du graphe")
     st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
     st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
     st.markdown(f"- **Densité** : {nx.density(G):.4f}")
     st.markdown(f"- **Lignes ignorées** : {skipped}")
 
-    # Tableau
+    # 📄 Table des relations
     st.markdown("### 📄 Relations extraites")
     st.dataframe(df, use_container_width=True)
+
 
 
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
