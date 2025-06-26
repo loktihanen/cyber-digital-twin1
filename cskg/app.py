@@ -532,23 +532,31 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
         st.warning("Aucune relation IMPACTS détectée. Lance d'abord la fusion et la propagation.")
         st.stop()
 
-    # === 2. Construction du graphe avec NetworkX ===
+    # === 2. Construction du graphe avec NetworkX (et correction des poids) ===
     G = nx.DiGraph()
     for _, row in df.iterrows():
         host = row["host"]
         service = row["service"]
         weight = row.get("weight", 1.0)
+
+        try:
+            weight = float(weight)
+            label = f"{weight:.2f}"
+        except (ValueError, TypeError):
+            weight = 1.0
+            label = "1.00"
+
         G.add_node(host, type="Host", label=host, color="#00cc66")
         G.add_node(service, type="Service", label=service, color="#ffaa00")
-        G.add_edge(host, service, weight=weight, label=f"{weight:.2f}")
+        G.add_edge(host, service, weight=weight, label=label)
 
     # === 3. Visualisation interactive PyVis ===
     def draw_pyvis(G):
         net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", directed=True)
         for node, data in G.nodes(data=True):
-            net.add_node(node, label=data["label"], color=data.get("color", "gray"), title=data["type"])
+            net.add_node(node, label=data["label"], color=data.get("color", "gray"), title=data.get("type", ""))
         for u, v, data in G.edges(data=True):
-            net.add_edge(u, v, value=float(data.get("weight", 1.0)), title=data.get("label", ""))
+            net.add_edge(u, v, value=data.get("weight", 1.0), title=data.get("label", ""))
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
         net.save_graph(tmp.name)
         return tmp.name
@@ -562,7 +570,12 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
 
     # === 4. Simulation What-If ===
     st.subheader("🧪 Simulation What-If")
-    selected_host = st.selectbox("Choisir un hôte à simuler", sorted([n for n, d in G.nodes(data=True) if d["type"] == "Host"]))
+    host_nodes = [n for n, d in G.nodes(data=True) if d.get("type") == "Host"]
+    if not host_nodes:
+        st.warning("Aucun hôte disponible pour la simulation.")
+        st.stop()
+
+    selected_host = st.selectbox("Choisir un hôte à simuler", sorted(host_nodes))
     max_steps = st.slider("Nombre d'étapes de propagation", 1, 5, 2)
     decay = st.slider("Facteur de dissipation", 0.1, 1.0, 0.6)
 
