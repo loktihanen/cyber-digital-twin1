@@ -471,6 +471,7 @@ elif menu_choice == "🔮 Embeddings & RotatE Prediction":
         st.write(result)
 
     st.success("✅ Module RotatE exécuté avec succès.")
+    
 elif menu_choice == "📈 R-GCN & Relation Prediction":
     st.header("🧠 R-GCN – Raisonnement sur le graphe de vulnérabilités")
     st.info("Cette section utilise un modèle R-GCN pour évaluer l'impact et la propagation des vulnérabilités sur l'infrastructure.")
