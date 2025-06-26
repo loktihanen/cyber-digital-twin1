@@ -117,11 +117,11 @@ reduced = tsne.fit_transform(emb)
 plt.figure(figsize=(10, 7))
 plt.scatter(reduced[:, 0], reduced[:, 1], s=10, alpha=0.7)
 plt.title("t-SNE des entités RotatE")
-plt.savefig("data/embeddings/tsne_rotate.png")
+plt.savefig("data/tsne_rotate.png")
 plt.close()
 
 # ======================== 8. SAUVEGARDE ========================
-np.savez_compressed("data/embeddings/rotate_embeddings.npz", emb=emb, entity2id=entity2id)
+np.savez_compressed("data/rotate_embeddings.npz", emb=emb, entity2id=entity2id)
 
 # ======================== 9. ÉVALUATION MRR ========================
 def evaluate(model, test_triples, k=10):
