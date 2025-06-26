@@ -7,10 +7,13 @@ import time
 import os
 
 # ======================== 2. CONNEXION NEO4J =======================
-#NEO4J_URI = os.environ.get("neo4j+s://8d5fbce8.databases.neo4j.io")
-#NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
-#NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "password")
-graph = Graph(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+uri = os.environ.get("NEO4J_URI")
+user = os.environ.get("NEO4J_USER")
+password = os.environ.get("NEO4J_PASSWORD")
+
+graph = Graph(uri, auth=(user, password))
+
 
 # ======================== 3. ONTOLOGIE RDF ========================
 rdf_graph = RDFGraph()
