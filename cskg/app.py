@@ -271,7 +271,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     st.markdown("---")
 
-    # --- Visualisation interactive du graphe fusionné (CVE_UNIFIED + SAME_AS)
+    # --- Fonction pour construire le graphe fusionné
     def build_cskg3_graph():
         nodes = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN u.name AS name, u.severity AS severity").data()
         rels = graph_db.run("""
@@ -287,40 +287,40 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
                 G.add_edge(r["from"], r["to"])
         return G
 
-def draw_pyvis_graph(G):
-    net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
-    net.from_nx(G)
-    for node in net.nodes:
-        node_id = node.get("id") or node.get("label")
-        if node_id and node_id in G.nodes:
-            sev = G.nodes[node_id].get("severity", "").lower()
-        else:
-            sev = ""
-        if sev == "critical":
-            node["color"] = "red"
-        elif sev == "high":
-            node["color"] = "orange"
-        elif sev == "medium":
-            node["color"] = "yellow"
-        else:
-            node["color"] = "lightblue"
-        node["title"] = f"Sévérité : {sev}"
-    tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-    net.save_graph(tmpfile.name)
-    return tmpfile.name
+    # --- Fonction pour dessiner le graphe avec pyvis et colorer selon sévérité
+    def draw_pyvis_graph(G):
+        net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
+        net.from_nx(G)
+        for node in net.nodes:
+            node_id = node.get("id") or node.get("label")
+            if node_id and node_id in G.nodes:
+                sev = G.nodes[node_id].get("severity", "").lower()
+            else:
+                sev = ""
+            if sev == "critical":
+                node["color"] = "red"
+            elif sev == "high":
+                node["color"] = "orange"
+            elif sev == "medium":
+                node["color"] = "yellow"
+            else:
+                node["color"] = "lightblue"
+            node["title"] = f"Sévérité : {sev}"
+        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+        net.save_graph(tmpfile.name)
+        return tmpfile.name
 
-# --- Ce bloc est hors de la fonction ---
-with st.spinner("Chargement et génération du graphe fusionné..."):
-    G = build_cskg3_graph()
-    if len(G.nodes) == 0:
-        st.warning("Le graphe fusionné est vide ou n'a pas encore été généré.")
-    else:
-        html_path = draw_pyvis_graph(G)
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html = f.read()
-        st.components.v1.html(html, height=650)
-        os.unlink(html_path)
-
+    # --- Exécution et affichage du graphe (hors des fonctions)
+    with st.spinner("Chargement et génération du graphe fusionné..."):
+        G = build_cskg3_graph()
+        if len(G.nodes) == 0:
+            st.warning("Le graphe fusionné est vide ou n'a pas encore été généré.")
+        else:
+            html_path = draw_pyvis_graph(G)
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html = f.read()
+            st.components.v1.html(html, height=650)
+            os.unlink(html_path)
 
     st.markdown("---")
 
@@ -338,7 +338,7 @@ with st.spinner("Chargement et génération du graphe fusionné..."):
         )
     else:
         st.warning("⚠️ Le fichier `kg_fusionne.ttl` n'existe pas encore. Exécute le script de fusion backend.")
-  
+
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
     st.info("Module pour entraîner RotatE (ou TransE, ComplEx, etc.) et prédire des relations manquantes.")
