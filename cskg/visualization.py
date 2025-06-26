@@ -79,4 +79,4 @@ def node_color(node_type):
 # ======================== 5. MAIN ========================
 if __name__ == "__main__":
     os.makedirs("data/visuals", exist_ok=True)
-    visualize_graph(output_file="data/visuals/graph.html")
+    visualize_graph(output_file="data/graph.html")
