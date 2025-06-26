@@ -208,75 +208,68 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     st.markdown("### 📄 Relations extraites")
     st.dataframe(df, use_container_width=True)
 
-elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
-    st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
-    st.info("Fusion des graphes KG1 (NVD) et KG2 (Nessus) via alignement sémantique multi-niveaux et création de CVE_UNIFIED.")
+elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":import networkx as nx
+from pyvis.network import Network
+import tempfile
 
-    st.subheader("📎 Statistiques de fusion et alignement")
-    col1, col2, col3 = st.columns(3)
+st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
+st.info("Visualisation interactive du graphe fusionné (CVE_UNIFIED et SAME_AS).")
 
-    with col1:
-        try:
-            total_same_as = graph_db.run("MATCH ()-[r:SAME_AS]->() RETURN count(r) AS total").evaluate()
-            st.metric("🔗 SAME_AS relations", total_same_as)
-        except Exception as e:
-            st.error("❌ Erreur lors du comptage des relations SAME_AS.")
-            st.exception(e)
+def build_nx_graph():
+    # Récupérer noeuds CVE_UNIFIED
+    nodes = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN u.name AS name, u.severity AS severity").data()
 
-    with col2:
-        try:
-            total_unified = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN count(u) AS total").evaluate()
-            st.metric("🧬 CVE_UNIFIED", total_unified)
-        except Exception as e:
-            st.error("❌ Erreur lors du comptage des CVE_UNIFIED.")
-            st.exception(e)
+    # Récupérer relations SAME_AS entre CVE_UNIFIED
+    rels = graph_db.run("""
+    MATCH (c1:CVE_UNIFIED)-[:SAME_AS]-(c2:CVE_UNIFIED)
+    RETURN c1.name AS from, c2.name AS to
+    """).data()
 
-    with col3:
-        try:
-            count_owl = graph_db.run("""
-                MATCH (c:CVE)-[:SAME_AS]-(n:CVE)
-                WHERE c.source = 'NVD' AND n.source = 'NESSUS'
-                RETURN count(DISTINCT c) AS count
-            """).evaluate()
-            st.metric("🪢 CVE alignées NVD+Nessus", count_owl)
-        except Exception as e:
-            st.error("❌ Erreur lors du comptage des alignements CVE.")
-            st.exception(e)
+    G = nx.Graph()
 
-    # =================== 📄 Tableau de correspondances ===================
-    st.markdown("### 📄 Extrait de correspondances SAME_AS")
+    for n in nodes:
+        label = n["name"]
+        severity = n.get("severity", "unknown")
+        G.add_node(label, severity=severity)
 
-    try:
-        same_as_df = graph_db.run("""
-            MATCH (c1:CVE)-[r:SAME_AS]-(c2:CVE)
-            WHERE r.method IS NOT NULL AND r.score IS NOT NULL
-            RETURN c1.name AS CVE_KG1, c2.name AS CVE_KG2,
-                   r.method AS Méthode, r.score AS Score
-            ORDER BY r.score DESC
-            LIMIT 100
-        """).to_data_frame()
+    for r in rels:
+        # éviter les boucles
+        if r["from"] != r["to"]:
+            G.add_edge(r["from"], r["to"])
 
-        st.dataframe(same_as_df, use_container_width=True)
+    return G
 
-    except Exception as e:
-        st.error("❌ Erreur lors du chargement des relations SAME_AS.")
-        st.exception(e)
+def draw_pyvis_graph(G):
+    net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
+    net.from_nx(G)
 
-    # =================== 📥 Téléchargement RDF ===================
-    st.subheader("📤 Téléchargement du fichier RDF fusionné")
-    rdf_path = "kg_fusionne.ttl"
-    if os.path.exists(rdf_path):
-        with open(rdf_path, "r", encoding="utf-8") as rdf_file:
-            rdf_content = rdf_file.read()
-        st.download_button(
-            label="📥 Télécharger RDF (Turtle)",
-            data=rdf_content,
-            file_name="kg_fusionne.ttl",
-            mime="text/turtle"
-        )
+    # Coloration selon sévérité
+    for node in net.nodes:
+        sev = G.nodes[node["id"]].get("severity", "").lower()
+        if sev == "critical":
+            node["color"] = "red"
+        elif sev == "high":
+            node["color"] = "orange"
+        elif sev == "medium":
+            node["color"] = "yellow"
+        else:
+            node["color"] = "lightblue"
+        node["title"] = f"Severity: {sev}"
+
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    net.save_graph(tmp_file.name)
+    return tmp_file.name
+
+with st.spinner("Chargement et génération du graphe fusionné..."):
+    G = build_nx_graph()
+    if len(G.nodes) == 0:
+        st.warning("Le graphe fusionné est vide ou n'a pas encore été généré.")
     else:
-        st.warning("⚠️ Le fichier `kg_fusionne.ttl` n'existe pas encore. Exécute le script de fusion backend.")
-
+        html_file = draw_pyvis_graph(G)
+        with open(html_file, 'r', encoding='utf-8') as f:
+            html = f.read()
+        st.components.v1.html(html, height=650)
+        os.unlink(html_file)  
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
     st.info("Module pour entraîner RotatE (ou TransE, ComplEx, etc.) et prédire des relations manquantes.")
