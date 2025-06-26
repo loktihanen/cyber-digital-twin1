@@ -556,7 +556,7 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loss_fn = nn.MarginRankingLoss(margin=1.0)
 
-    EPOCHS = 30
+    EPOCHS = 2
     for epoch in range(EPOCHS):
         model.train()
         optimizer.zero_grad()
