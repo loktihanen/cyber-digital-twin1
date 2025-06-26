@@ -223,7 +223,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     with col1:
         try:
-            total_same_as = graph.run("MATCH ()-[r:SAME_AS]->() RETURN count(r) AS total").evaluate()
+            total_same_as = graph_db.run("MATCH ()-[r:SAME_AS]->() RETURN count(r) AS total").evaluate()
             st.metric("🔗 Relations SAME_AS", total_same_as)
         except Exception as e:
             st.error("❌ Erreur lors du comptage des relations SAME_AS.")
@@ -231,7 +231,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     with col2:
         try:
-            total_unified = graph.run("MATCH (u:CVE_UNIFIED) RETURN count(u) AS total").evaluate()
+            total_unified = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN count(u) AS total").evaluate()
             st.metric("🧬 CVE_UNIFIED", total_unified)
         except Exception as e:
             st.error("❌ Erreur lors du comptage des CVE_UNIFIED.")
@@ -239,7 +239,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     with col3:
         try:
-            total_aligned = graph.run("""
+            total_aligned = graph_db.run("""
                 MATCH (c1:CVE)-[:SAME_AS]-(c2:CVE)
                 WHERE c1.source = 'NVD' AND c2.source = 'NESSUS'
                 RETURN count(DISTINCT c1) AS count
@@ -253,7 +253,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     # --- Tableau des correspondances SAME_AS avec méthode et score
     try:
-        df_same_as = graph.run("""
+        df_same_as = graph_db.run("""
             MATCH (c1:CVE)-[r:SAME_AS]-(c2:CVE)
             WHERE exists(r.method) AND exists(r.score)
             RETURN c1.name AS CVE_NVD, c2.name AS CVE_NESSUS,
@@ -273,10 +273,8 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     # --- Visualisation interactive du graphe fusionné (CVE_UNIFIED + SAME_AS)
     def build_cskg3_graph():
-        # Noeuds CVE_UNIFIED
-        nodes = graph.run("MATCH (u:CVE_UNIFIED) RETURN u.name AS name, u.severity AS severity").data()
-        # Relations SAME_AS entre CVE_UNIFIED
-        rels = graph.run("""
+        nodes = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN u.name AS name, u.severity AS severity").data()
+        rels = graph_db.run("""
             MATCH (c1:CVE_UNIFIED)-[:SAME_AS]-(c2:CVE_UNIFIED)
             RETURN c1.name AS from, c2.name AS to
         """).data()
@@ -292,7 +290,6 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     def draw_pyvis_graph(G):
         net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
         net.from_nx(G)
-        # Coloration selon la sévérité
         for node in net.nodes:
             sev = G.nodes[node["id"]].get("severity", "").lower()
             if sev == "critical":
