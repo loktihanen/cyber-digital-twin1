@@ -351,9 +351,126 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         st.warning("⚠️ Le fichier `kg_fusionne.ttl` est introuvable. Exécute `rdf_export.py` ou `propagate_impacts.py`.")
 
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import numpy as np
+    import pandas as pd
+    from py2neo import Graph
+    from sklearn.model_selection import train_test_split
+    import matplotlib.pyplot as plt
+    import networkx as nx
+
     st.header("🔮 Embeddings & Prédiction avec RotatE")
-    st.info("Module pour entraîner RotatE (ou TransE, ComplEx, etc.) et prédire des relations manquantes.")
-    st.warning("🔧 À implémenter : chargement des triplets, PyKEEN, prédiction interactive.")
+    st.info("Ce module entraîne le modèle RotatE sur les triplets CVE_UNIFIED et prédit des relations ou entités manquantes.")
+
+    # Connexion à Neo4j
+    uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+    user = "neo4j"
+    password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+    graph = Graph(uri, auth=(user, password))
+
+    # Extraction des triplets
+    query = """
+    MATCH (s:CVE_UNIFIED)-[r]->(o)
+    WHERE s.name IS NOT NULL AND o.name IS NOT NULL
+    RETURN s.name AS head, type(r) AS relation, o.name AS tail
+    """
+    df = graph.run(query).to_data_frame().dropna()
+    all_entities = pd.Index(df['head'].tolist() + df['tail'].tolist()).unique()
+    all_relations = pd.Index(df['relation']).unique()
+
+    entity2id = {entity: idx for idx, entity in enumerate(all_entities)}
+    relation2id = {rel: idx for idx, rel in enumerate(all_relations)}
+    triplets = [(entity2id[h], relation2id[r], entity2id[t]) for h, r, t in df.values]
+    triplets = np.array(triplets)
+
+    train_triples, test_triples = train_test_split(triplets, test_size=0.1, random_state=42)
+
+    # Modèle RotatE
+    class RotatE(nn.Module):
+        def __init__(self, num_entities, num_relations, emb_dim=400):
+            super().__init__()
+            assert emb_dim % 2 == 0
+            self.emb_dim = emb_dim
+            self.entity_emb = nn.Embedding(num_entities, emb_dim)
+            self.relation_emb = nn.Embedding(num_relations, emb_dim // 2)
+            self.gamma = nn.Parameter(torch.Tensor([12.0]))
+            self.init_weights()
+
+        def init_weights(self):
+            nn.init.uniform_(self.entity_emb.weight, -1, 1)
+            nn.init.uniform_(self.relation_emb.weight, 0, 2 * np.pi)
+
+        def forward(self, head, rel, tail):
+            head_e = self.entity_emb(head)
+            tail_e = self.entity_emb(tail)
+            rel_phase = self.relation_emb(rel)
+            re_head, im_head = torch.chunk(head_e, 2, dim=1)
+            re_tail, im_tail = torch.chunk(tail_e, 2, dim=1)
+            phase = rel_phase / (2 * np.pi)
+            re_rel = torch.cos(phase)
+            im_rel = torch.sin(phase)
+            re_rot = re_head * re_rel - im_head * im_rel
+            im_rot = re_head * im_rel + im_head * re_rel
+            re_diff = re_rot - re_tail
+            im_diff = im_rot - im_tail
+            score = self.gamma - torch.norm(torch.cat([re_diff, im_diff], dim=1), dim=1)
+            return score
+
+    # Entraînement
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = RotatE(len(entity2id), len(relation2id)).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    loss_fn = nn.MarginRankingLoss(margin=1.0)
+
+    def generate_negative_sample(batch, num_entities):
+        neg = batch.clone()
+        neg[:, 2] = torch.randint(0, num_entities, (batch.shape[0],))
+        return neg
+
+    EPOCHS = 30
+    BATCH_SIZE = 128
+    for epoch in range(EPOCHS):
+        np.random.shuffle(train_triples)
+        total_loss = 0
+        for i in range(0, len(train_triples), BATCH_SIZE):
+            pos = torch.tensor(train_triples[i:i+BATCH_SIZE], dtype=torch.long).to(device)
+            neg = generate_negative_sample(pos.clone(), len(entity2id)).to(device)
+            pos_scores = model(pos[:, 0], pos[:, 1], pos[:, 2])
+            neg_scores = model(neg[:, 0], neg[:, 1], neg[:, 2])
+            y = torch.ones(pos_scores.size()).to(device)
+            loss = loss_fn(pos_scores, neg_scores, y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+        st.text(f"📚 Epoch {epoch+1}/{EPOCHS} - Loss: {total_loss:.4f}")
+
+    # Prédiction d'entités
+    def predict_tail(head, relation, top_k=5):
+        if head not in entity2id or relation not in relation2id:
+            return []
+        h = torch.tensor([entity2id[head]]).to(device)
+        r = torch.tensor([relation2id[relation]]).to(device)
+        tails = torch.arange(len(entity2id)).to(device)
+        h_batch = h.repeat(len(tails))
+        r_batch = r.repeat(len(tails))
+        with torch.no_grad():
+            scores = model(h_batch, r_batch, tails)
+        top_indices = torch.topk(scores, top_k).indices.cpu().numpy()
+        id2entity = {v: k for k, v in entity2id.items()}
+        return [id2entity[i] for i in top_indices]
+
+    st.markdown("### 🎯 Exemple de prédiction d'entité")
+    example_head = st.selectbox("Tête (CVE ou Host)", list(entity2id.keys()))
+    example_relation = st.selectbox("Relation (impacte, utilise...)", list(relation2id.keys()))
+    if st.button("Prédire les objets (tails)"):
+        result = predict_tail(example_head, example_relation, top_k=5)
+        st.write(f"**Top-5 objets pour ({example_head}, {example_relation}, ?)**")
+        st.write(result)
+
+    st.success("✅ Module RotatE exécuté avec succès.")
 
 elif menu_choice == "📈 R-GCN & Relation Prediction":
     st.header("📈 Prédictions par GNN – R-GCN")
