@@ -71,12 +71,24 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     from pyvis.network import Network
 
     st.subheader("🌐 Visualisation interactive (`pyvis`)")
-    G = nx.DiGraph()
-    for _, row in df.iterrows():
-        if row["target_type"] in selected_entities:
-            G.add_node(row["source"], type="CVE", label=row["source"])
-            G.add_node(row["target"], type=row["target_type"], label=row["target"])
-            G.add_edge(row["source"], row["target"], label=row["relation"])
+        G = nx.DiGraph()
+        skipped_rows = 0
+        for _, row in df.iterrows():
+            src = row.get("source")
+            tgt = row.get("target")
+            tgt_type = row.get("target_type")
+
+            if not src or not tgt or pd.isna(src) or pd.isna(tgt):
+                skipped_rows += 1
+                continue
+
+            if tgt_type not in selected_entities:
+                continue
+
+            G.add_node(src, type="CVE", label=src)
+            G.add_node(tgt, type=tgt_type, label=tgt)
+            G.add_edge(src, tgt, label=row["relation"])
+
 
     color_map = {
         "CVE": "#ff4d4d", "CWE": "#ffa500", "CPE": "#6699cc", "Entity": "#dddd00"
