@@ -211,8 +211,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     import networkx as nx
     from pyvis.network import Network
     import tempfile
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
+    import os
 
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
     st.info("Visualisation du graphe résultant de la fusion entre les CVE NVD et Nessus (via SAME_AS → CVE_UNIFIED)")
@@ -253,7 +252,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         G.add_node(tgt, type=tgt_type, label=tgt)
         G.add_edge(src, tgt, label=rel)
 
-    # === Récupération des statistiques de fusion et alignement ===
+    # === Statistiques de fusion ===
     nb_unifies = graph_db.run("""
         MATCH (c:CVE)-[:SAME_AS]-(n:CVE)
         WHERE c.source = 'NVD' AND n.source = 'NESSUS'
@@ -273,7 +272,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         RETURN count(r) AS total
     """).evaluate()
 
-    # === Visualisation PyVis ===
+    # === Visualisation PyVis uniquement (matplotlib supprimé)
     def draw_pyvis_graph(G):
         net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
         for node, data in G.nodes(data=True):
@@ -286,31 +285,12 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         net.save_graph(tmpfile.name)
         return tmpfile.name
 
-    # === Affichage PyVis
     st.subheader("🌐 Visualisation interactive (PyVis)")
     with st.spinner("🔄 Génération du graphe..."):
         html_path = draw_pyvis_graph(G)
         with open(html_path, "r", encoding="utf-8") as f:
             html = f.read()
         st.components.v1.html(html, height=700, scrolling=True)
-
-    # === Visualisation statique matplotlib
-    st.subheader("📊 Visualisation statique (matplotlib)")
-    node_colors = [color_map.get(G.nodes[n].get("type", "Other"), "#cccccc") for n in G.nodes()]
-    pos = nx.spring_layout(G, k=0.3, seed=42)
-
-    plt.figure(figsize=(18, 12))
-    nx.draw_networkx_nodes(G, pos, node_size=600, node_color=node_colors)
-    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True)
-    nx.draw_networkx_labels(G, pos, font_size=9)
-    edge_labels = nx.get_edge_attributes(G, 'label')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="orange", font_size=7)
-
-    legend_patches = [mpatches.Patch(color=c, label=l) for l, c in color_map.items()]
-    plt.legend(handles=legend_patches, loc="best", title="Types de nœuds")
-    plt.title("🔎 Graphe des vulnérabilités fusionnées (CSKG3)", fontsize=16)
-    plt.axis("off")
-    st.pyplot(plt)
 
     # === Statistiques du graphe ===
     st.markdown("### 📈 Statistiques CSKG3")
