@@ -625,7 +625,7 @@ elif menu_choice == "📊 Simulation Heatmap":
         MATCH (c:CVE_UNIFIED)-[:DETECTED_BY]->(:Plugin)-[:IS_ON]->(h:Host)-[:IMPACTS]->(s:Service)
         RETURN c.name AS cve, h.name AS host, s.name AS service
         """
-        return graph.run(query).to_data_frame()
+        return graph_db.run(query).to_data_frame()
 
     df = load_cve_to_service()
 
