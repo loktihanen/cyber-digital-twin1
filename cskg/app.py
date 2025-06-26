@@ -1,10 +1,10 @@
-import matplotlib.pyplot as plt
-# ======================== 0. IMPORTS ========================
 import streamlit as st
 from py2neo import Graph
 import pandas as pd
 import networkx as nx
 from pyvis.network import Network
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import os
 # ======================== CONFIGURATION STREAMLIT ========================
 st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
@@ -28,81 +28,131 @@ try:
     print("Connexion Neo4j réussie :", info)
 except Exception as e:
     print("Erreur de connexion Neo4j :", e)
-# ======================== 2. TITLE ========================
+
+# ======================== 2. CONFIG & TITRE ========================
 st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
-st.title("🛡️ Cyber Digital Twin : Visualisation du Knowledge Graph fusionné")
+st.title("🛡️ Cyber Digital Twin – Visualisation des KG")
 
 st.markdown("""
-Ce tableau de bord visualise le **Knowledge Graph fusionné** entre les vulnérabilités publiques (NVD/CVE) et les vulnérabilités détectées par **Nessus**.  
-Utilise les ontologies **UCO**, **STUCCO** et des techniques de **NER**, **Embeddings** et **Alignement sémantique**.
+Ce tableau de bord permet d'explorer :
+- **KG1** : Vulnérabilités NVD (CVE, CWE, CPE)
+- **KG2** : Résultats Nessus (Host, Plugin, CVE)
+- **KG3** : Graphe fusionné et enrichi (CVE_UNIFIED)
+
+📘 Ontologies : `UCO`, `STUCCO`  
+🔎 Techniques : `NER`, `Alignement`, `Embedding`, `Reasoning`
 """)
 
-# ======================== 3. PARAMÈTRES DE RECHERCHE ========================
-st.sidebar.header("🔎 Filtres")
-max_nodes = st.sidebar.slider("Nombre max de relations", min_value=50, max_value=1000, value=300)
-entity_filter = st.sidebar.multiselect("Types d'entité à inclure", options=["CVE", "CWE", "CPE", "Plugin", "Host", "Service", "Port"], default=["CVE", "Host", "Plugin"])
-min_cvss = st.sidebar.slider("Score CVSS minimum", 0.0, 10.0, 0.0)
+# ======================== 3. CHOIX DU KG ========================
+kg_option = st.selectbox("🧠 Choisir le graphe à afficher :", ["KG1 - NVD", "KG2 - Nessus", "KG3 - Fusionné"])
 
-# ======================== 4. QUERY NEO4J ========================
+# ======================== 4. PARAMÈTRES ========================
+st.sidebar.header("🎛️ Filtres")
+max_links = st.sidebar.slider("Nombre max de relations", 50, 1000, 300)
+entity_filter = st.sidebar.multiselect(
+    "Types d'entité à afficher",
+    ["CVE", "CVE_UNIFIED", "CWE", "CPE", "Host", "Plugin", "Port", "Service", "Entity"],
+    default=["CVE", "CVE_UNIFIED", "Plugin", "Host"]
+)
+
+# ======================== 5. REQUÊTES PAR KG ========================
 @st.cache_data
-def load_data(max_links, min_cvss):
-    query = f"""
-    MATCH (c:CVE_UNIFIED)-[r]->(x)
-    WHERE c.cvss >= {min_cvss}
-    RETURN c.name AS source, type(r) AS relation, labels(x)[0] AS target_type, x.name AS target
-    LIMIT {max_links}
-    """
-    return graph.run(query).to_data_frame()
+def get_graph_data(kg: str, limit: int):
+    if kg == "KG1 - NVD":
+        query = f"""
+        MATCH (a:CVE)-[r]->(b)
+        RETURN a.name AS source, type(r) AS relation, b.name AS target,
+               labels(a)[0] AS source_type, labels(b)[0] AS target_type
+        LIMIT {limit}
+        """
+    elif kg == "KG2 - Nessus":
+        query = f"""
+        MATCH (h:Host)-[r1]->(x)-[r2]->(p:Plugin)-[r3]->(c:CVE)
+        RETURN h.name AS source, type(r1) AS relation, x.name AS mid,
+               type(r2) AS rel2, p.name AS plugin, type(r3) AS rel3, c.name AS target,
+               'Host' AS source_type, 'CVE' AS target_type
+        LIMIT {limit}
+        """
+    else:  # KG3
+        query = f"""
+        MATCH (a:CVE_UNIFIED)-[r]->(b)
+        RETURN a.name AS source, type(r) AS relation, b.name AS target,
+               labels(a)[0] AS source_type, labels(b)[0] AS target_type
+        LIMIT {limit}
+        """
+    return graph.run(query).data()
 
-df = load_data(max_nodes, min_cvss)
+data = get_graph_data(kg_option, max_links)
 
-if df.empty:
-    st.warning("Aucune relation trouvée avec les paramètres actuels.")
-    st.stop()
-
-# ======================== 5. CONSTRUCTION GRAPHE ========================
-@st.cache_data
-def build_network(df, allowed_types):
-    G = nx.DiGraph()
-    for _, row in df.iterrows():
-        if row['target_type'] in allowed_types:
-            G.add_node(row['source'], type="CVE_UNIFIED")
-            G.add_node(row['target'], type=row['target_type'])
-            G.add_edge(row['source'], row['target'], label=row['relation'])
-    return G
-
-G = build_network(df, entity_filter)
-
-# ======================== 6. VISUALISATION ========================
-st.subheader("🕸️ Graphe de connaissances (visualisation interactive)")
-net = Network(height="750px", width="100%", bgcolor="#1e1e1e", font_color="white")
-
+# ======================== 6. CONSTRUCTION DU GRAPHE ========================
+G = nx.DiGraph()
 color_map = {
-    "CVE_UNIFIED": "red", "CWE": "orange", "CPE": "blue",
-    "Host": "green", "Plugin": "purple", "Service": "yellow", "Port": "pink"
+    "CVE": "#ff4d4d", "CVE_UNIFIED": "#ffcc00", "CWE": "#ffa500", "CPE": "#6699cc",
+    "Host": "#00cc66", "Plugin": "#66ccff", "Port": "#9966cc", "Service": "#ff9900", "Entity": "#dddd00"
 }
+skipped = 0
+for row in data:
+    try:
+        src = row["source"]
+        tgt = row["target"]
+        src_type = row.get("source_type", "Other")
+        tgt_type = row.get("target_type", "Other")
+        rel = row["relation"]
+        if src_type not in entity_filter or tgt_type not in entity_filter:
+            continue
+        G.add_node(src, type=src_type, label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=rel)
+    except:
+        skipped += 1
 
-for node, attr in G.nodes(data=True):
-    node_type = attr.get("type", "Other")
-    color = color_map.get(node_type, "gray")
-    net.add_node(node, label=node, color=color)
+# ======================== 7. PYVIS INTERACTIVE ========================
+st.subheader("🌐 Visualisation interactive (`pyvis`)")
+net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
 
-for src, tgt, edge in G.edges(data=True):
-    net.add_edge(src, tgt, label=edge.get("label", ""))
+for node, data in G.nodes(data=True):
+    net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
 
-output_path = "/tmp/graph.html"
-net.show(output_path)
+for src, tgt, data in G.edges(data=True):
+    net.add_edge(src, tgt, title=data.get("label", ""))
 
-with open(output_path, 'r', encoding='utf-8') as f:
-    html_content = f.read()
-    st.components.v1.html(html_content, height=750, scrolling=True)
+path = "/tmp/graph.html"
+net.show(path)
+with open(path, 'r', encoding='utf-8') as f:
+    html = f.read()
+    st.components.v1.html(html, height=700, scrolling=True)
 
-# ======================== 7. TABLEAUX ========================
+# ======================== 8. VISUALISATION MATPLOTLIB ========================
+st.subheader("📊 Visualisation statique (`matplotlib`)")
+node_colors = [color_map.get(G.nodes[n]["type"], "#cccccc") for n in G.nodes()]
+pos = nx.spring_layout(G, k=0.25, seed=42)
+
+plt.figure(figsize=(16, 12))
+nx.draw_networkx_nodes(G, pos, node_size=600, node_color=node_colors)
+nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True)
+nx.draw_networkx_labels(G, pos, font_size=8)
+
+edge_labels = nx.get_edge_attributes(G, 'label')
+nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
+
+patches = [mpatches.Patch(color=color, label=label) for label, color in color_map.items()]
+plt.legend(handles=patches, loc="upper left", title="Types de nœuds")
+plt.title(f"Graphe {kg_option}")
+plt.axis("off")
+st.pyplot(plt)
+
+# ======================== 9. TABLEAUX ========================
 st.subheader("📄 Relations extraites")
+df = pd.DataFrame(data)
 st.dataframe(df, use_container_width=True)
 
-# ======================== 8. INFOS ========================
+# ======================== 10. STATISTIQUES ========================
 st.sidebar.markdown("---")
-st.sidebar.info("Projet de M2 • Intégration KG1 (NVD) + KG2 (Nessus) • Alignement + Embeddings + Digital Twin • Visualisation interactive")
+st.sidebar.markdown(f"✅ Nœuds : {G.number_of_nodes()}")
+st.sidebar.markdown(f"✅ Arêtes : {G.number_of_edges()}")
+st.sidebar.markdown(f"⚠️ Lignes ignorées : {skipped}")
+st.sidebar.markdown(f"📊 Densité : {nx.density(G):.4f}")
+st.sidebar.info("Projet de M2 — Cyber Digital Twin avec graphes KG1, KG2, KG3")
+
 
 
