@@ -2,7 +2,7 @@
 import streamlit as st
 from py2neo import Graph
 from PIL import Image
-
+import os
 # ======================== ⚙️ CONFIGURATION ========================
 st.set_page_config(page_title="Cyber Digital Twin Dashboard", layout="wide")
 st.title("🧠 Cyber Digital Twin – Menu principal")
@@ -207,10 +207,6 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     # 📄 Table des relations
     st.markdown("### 📄 Relations extraites")
     st.dataframe(df, use_container_width=True)
-
-
-
-import os  # ✅ requis pour vérifier le fichier RDF
 
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
