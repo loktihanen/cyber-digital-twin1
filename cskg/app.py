@@ -604,6 +604,92 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
         st.subheader("🧯 Analyse du risque cumulé")
         total_risk = sum(results.values())
         st.metric("📛 Risque total estimé", f"{total_risk:.2f}")
+elif menu_choice == "📊 Simulation Heatmap":
+    st.header("📊 Heatmap de vulnérabilité par service")
+    st.info("Ce module simule la propagation de CVEs vers les services via les hôtes intermédiaires et génère une heatmap de criticité.")
+
+    import pandas as pd
+    import numpy as np
+    import networkx as nx
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from pyvis.network import Network
+    import streamlit.components.v1 as components
+    import tempfile
+
+    # ======================== 1. Requête Neo4j ========================
+    @st.cache_data
+    def load_cve_to_service():
+        query = """
+        MATCH (c:CVE_UNIFIED)-[:DETECTED_BY]->(:Plugin)-[:IS_ON]->(h:Host)-[:IMPACTS]->(s:Service)
+        RETURN c.name AS cve, h.name AS host, s.name AS service
+        """
+        return graph.run(query).to_data_frame()
+
+    df = load_cve_to_service()
+
+    if df.empty:
+        st.warning("⚠️ Aucune correspondance CVE → Host → Service trouvée.")
+        st.stop()
+
+    # ======================== 2. Graphe + score simulé ========================
+    G = nx.DiGraph()
+    for _, row in df.iterrows():
+        cve, host, service = row["cve"], row["host"], row["service"]
+        G.add_edge(cve, host, weight=1.0)
+        G.add_edge(host, service, weight=1.0)
+
+    cves = sorted(df["cve"].unique())
+    services = sorted(df["service"].unique())
+
+    st.markdown("### 🎯 Sélection de CVEs à simuler")
+    selected_cves = st.multiselect("Choisir des CVEs sources", cves[:20], default=cves[:3])
+    decay = st.slider("Facteur de dissipation", 0.1, 1.0, 0.7)
+
+    if st.button("🔥 Générer la heatmap"):
+        score_matrix = pd.DataFrame(0, index=selected_cves, columns=services, dtype=float)
+
+        for cve in selected_cves:
+            scores = {cve: 1.0}
+            frontier = [cve]
+            for _ in range(3):  # max 3 hops
+                next_frontier = []
+                for node in frontier:
+                    for neighbor in G.successors(node):
+                        score = scores[node] * decay
+                        if score > scores.get(neighbor, 0):
+                            scores[neighbor] = score
+                            next_frontier.append(neighbor)
+                frontier = next_frontier
+
+            for service in services:
+                if service in scores:
+                    score_matrix.loc[cve, service] = scores[service]
+
+        # ======================== 3. Affichage heatmap ========================
+        st.subheader("🌡️ Heatmap des services vulnérables")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        sns.heatmap(score_matrix, cmap="Reds", linewidths=0.5, annot=True, fmt=".2f", ax=ax)
+        ax.set_title("Score de vulnérabilité CVE → Service")
+        st.pyplot(fig)
+
+        # ======================== 4. Graphe interactif PyVis ========================
+        st.subheader("🌐 Visualisation du graphe CVE → Host → Service")
+        net = Network(height="600px", width="100%", directed=True)
+
+        # Ajout de noeuds et d’arcs
+        for node in G.nodes:
+            net.add_node(node, label=node)
+
+        for u, v, d in G.edges(data=True):
+            color = "red" if u in selected_cves else "gray"
+            net.add_edge(u, v, value=d["weight"], color=color)
+
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+        net.show(tmp_file.name)
+        with open(tmp_file.name, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        components.html(html_content, height=650, scrolling=True)
 
 # ======================== 🧠 INFOS DE FIN ========================
 st.sidebar.markdown("---")
