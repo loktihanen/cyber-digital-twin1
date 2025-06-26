@@ -30,6 +30,7 @@ jobs:
         run: |
           python cskg/align_and_merge.py
           python cskg/propagate_impacts.py
+          python cskg/fuse_unified_cves.py
 
       - name: Train Embeddings
         run: python cskg/embeddings_train.py
