@@ -10,21 +10,28 @@ import matplotlib.patches as mpatches
 from py2neo import Graph
 import tempfile
 
-# ======================== CONFIGURATION ========================
+# ======================== 1. CONFIGURATION ========================
 st.set_page_config(layout="wide")
 st.title("🛡️ Cyber Digital Twin – Visualisation en temps réel")
 
-# ======================== CONNEXION NEO4J ========================
+# ======================== 2. CONNEXION NEO4J ========================
 @st.cache_resource
 def connect_neo4j():
-    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
-    user = os.environ.get("NEO4J_USER", "neo4j")
-    password = os.environ.get("NEO4J_PASSWORD", "password")
-    return Graph(uri, auth=(user, password))
+    try:
+        uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+        user = "neo4j"
+        password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+        graph = Graph(uri, auth=(user, password))
+        graph.run("RETURN 1").evaluate()
+        st.success("✅ Connexion Neo4j Aura réussie")
+        return graph
+    except Exception as e:
+        st.error(f"❌ Erreur de connexion Neo4j : {e}")
+        st.stop()
 
 graph_db = connect_neo4j()
 
-# ======================== REQUÊTE & CONSTRUCTION DU GRAPHE ========================
+# ======================== 3. REQUÊTE & CONSTRUCTION DU GRAPHE ========================
 def build_graph(kg: str, limit=300):
     if kg == "KG1 - NVD":
         query = f"""
@@ -53,7 +60,7 @@ def build_graph(kg: str, limit=300):
         G.add_edge(src, tgt, label=rel)
     return G
 
-# ======================== VISUALISATION PYVIS ========================
+# ======================== 4. VISUALISATION PYVIS ========================
 def show_pyvis(G):
     net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
     color_map = {
@@ -70,7 +77,7 @@ def show_pyvis(G):
     with open(tmp_file.name, 'r') as f:
         components.html(f.read(), height=700, scrolling=True)
 
-# ======================== VISUALISATION MATPLOTLIB ========================
+# ======================== 5. VISUALISATION STATIQUE MATPLOTLIB ========================
 def show_static_plot(G):
     color_map_mpl = {
         "CVE": "red", "CWE": "orange", "CPE": "blue", "Entity": "green"
@@ -90,7 +97,7 @@ def show_static_plot(G):
     plt.axis('off')
     st.pyplot(plt)
 
-# ======================== INTERFACE STREAMLIT ========================
+# ======================== 6. INTERFACE STREAMLIT ========================
 kg_choice = st.selectbox("Choisir un graphe à afficher :", ["KG1 - NVD", "KG3 - Fusionné"])
 G = build_graph(kg_choice)
 
