@@ -633,7 +633,7 @@ elif menu_choice == "📊 Simulation Heatmap":
         st.warning("⚠️ Aucune correspondance CVE → Host → Service trouvée.")
         st.stop()
 
-    # ======================== 2. Graphe + score simulé ========================
+    # ======================== 2. Construction du graphe ========================
     G = nx.DiGraph()
     for _, row in df.iterrows():
         cve, host, service = row["cve"], row["host"], row["service"]
@@ -653,7 +653,7 @@ elif menu_choice == "📊 Simulation Heatmap":
         for cve in selected_cves:
             scores = {cve: 1.0}
             frontier = [cve]
-            for _ in range(3):  # max 3 hops
+            for _ in range(3):
                 next_frontier = []
                 for node in frontier:
                     for neighbor in G.successors(node):
@@ -667,21 +667,18 @@ elif menu_choice == "📊 Simulation Heatmap":
                 if service in scores:
                     score_matrix.loc[cve, service] = scores[service]
 
-        # ======================== 3. Affichage heatmap ========================
+        # ======================== 3. Heatmap ========================
         st.subheader("🌡️ Heatmap des services vulnérables")
         fig, ax = plt.subplots(figsize=(12, 6))
         sns.heatmap(score_matrix, cmap="Reds", linewidths=0.5, annot=True, fmt=".2f", ax=ax)
         ax.set_title("Score de vulnérabilité CVE → Service")
         st.pyplot(fig)
 
-        # ======================== 4. Graphe interactif PyVis ========================
-        st.subheader("🌐 Visualisation du graphe CVE → Host → Service")
+        # ======================== 4. Visualisation PyVis ========================
+        st.subheader("🌐 Graphe interactif CVE → Host → Service")
         net = Network(height="600px", width="100%", directed=True)
-
-        # Ajout de noeuds et d’arcs
         for node in G.nodes:
             net.add_node(node, label=node)
-
         for u, v, d in G.edges(data=True):
             color = "red" if u in selected_cves else "gray"
             net.add_edge(u, v, value=d["weight"], color=color)
