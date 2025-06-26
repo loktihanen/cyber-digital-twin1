@@ -507,6 +507,41 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
             out += self.bias
             return torch.relu(out)
 
+elif menu_choice == "📈 R-GCN & Relation Prediction":
+    import streamlit as st
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    st.header("📈 Prédictions par GNN – R-GCN")
+    st.info("Exploration par Graph Neural Network (R-GCN) pour la complétion et la classification des relations.")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # ======= Définition modèle R-GCN =========
+    class RGCNLayer(nn.Module):
+        def __init__(self, in_dim, out_dim, num_rels):
+            super(RGCNLayer, self).__init__()
+            self.weight = nn.Parameter(torch.Tensor(num_rels, in_dim, out_dim))
+            self.self_loop_weight = nn.Parameter(torch.Tensor(in_dim, out_dim))
+            self.bias = nn.Parameter(torch.Tensor(out_dim))
+            nn.init.xavier_uniform_(self.weight)
+            nn.init.xavier_uniform_(self.self_loop_weight)
+            nn.init.zeros_(self.bias)
+
+        def forward(self, entity_emb, edge_index, edge_type, num_entities):
+            out = torch.zeros_like(entity_emb)
+            for i in range(edge_index.size(1)):
+                src = edge_index[0, i]
+                dst = edge_index[1, i]
+                rel = edge_type[i]
+                out[dst] += torch.matmul(entity_emb[src], self.weight[rel])
+            out += torch.matmul(entity_emb, self.self_loop_weight)
+            out += self.bias
+            return torch.relu(out)
+
     class RGCN(nn.Module):
         def __init__(self, num_entities, num_relations, emb_dim=100, num_layers=2):
             super(RGCN, self).__init__()
@@ -529,25 +564,22 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
             t = entity_emb[tail_idx]
             return self.score_fn(h, t)
 
-    # ======= Préparation données =======
-    # Supposons que train_triples et test_triples soient déjà définis comme numpy arrays (shape Nx3):
-    # train_triples = np.array([[head_id, rel_id, tail_id], ...])
-    # test_triples = np.array([[head_id, rel_id, tail_id], ...])
-    # entity2id et relation2id : dictionnaires nom->id
-
-    if 'train_triples' not in st.session_state or 'test_triples' not in st.session_state \
-       or 'entity2id' not in st.session_state or 'relation2id' not in st.session_state:
-        st.error("❌ Les données train_triples, test_triples, entity2id, relation2id doivent être chargées au préalable.")
+    # ======= Vérification données dans session_state =======
+    required_keys = ['train_triples', 'test_triples', 'entity2id', 'relation2id']
+    if not all(k in st.session_state for k in required_keys):
+        st.error(f"❌ Les données {', '.join(required_keys)} doivent être chargées au préalable dans st.session_state.")
     else:
-        train_triples = st.session_state.train_triples
-        test_triples = st.session_state.test_triples
+        # Conversion en np.array si besoin
+        train_triples = np.array(st.session_state.train_triples)
+        test_triples = np.array(st.session_state.test_triples)
         entity2id = st.session_state.entity2id
         relation2id = st.session_state.relation2id
+
         hosts = [e for e in entity2id if e.startswith("Host")]
         impact_rel_id = relation2id.get("IMPACTS", 0)
 
-        edge_index = torch.tensor([[h, t] for h, r, t in train_triples], dtype=torch.long).t()
-        edge_type = torch.tensor([r for h, r, t in train_triples], dtype=torch.long)
+        edge_index = torch.tensor([[h, t] for h, r, t in train_triples], dtype=torch.long).t().to(device)
+        edge_type = torch.tensor([r for h, r, t in train_triples], dtype=torch.long).to(device)
 
         model = RGCN(len(entity2id), len(relation2id), emb_dim=128).to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
@@ -558,29 +590,31 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
         EPOCHS = st.number_input("Nombre d'époques", min_value=1, max_value=50, value=5, step=1)
 
         losses = []
-        for epoch in range(EPOCHS):
-            model.train()
-            optimizer.zero_grad()
+        with st.spinner("Entraînement en cours..."):
+            for epoch in range(EPOCHS):
+                model.train()
+                optimizer.zero_grad()
 
-            entity_emb = model(edge_index.to(device), edge_type.to(device))
+                entity_emb = model(edge_index, edge_type)
 
-            idx = np.random.choice(len(train_triples), 1024)
-            batch = train_triples[idx]
-            heads = torch.tensor(batch[:, 0]).to(device)
-            tails = torch.tensor(batch[:, 2]).to(device)
+                batch_size = min(1024, len(train_triples))
+                idx = np.random.choice(len(train_triples), batch_size, replace=False)
+                batch = train_triples[idx]
+                heads = torch.tensor(batch[:, 0]).to(device)
+                tails = torch.tensor(batch[:, 2]).to(device)
 
-            tails_neg = torch.randint(0, len(entity2id), (len(batch),)).to(device)
+                tails_neg = torch.randint(0, len(entity2id), (batch_size,), device=device)
 
-            pos_scores = model.score(entity_emb, heads, tails)
-            neg_scores = model.score(entity_emb, heads, tails_neg)
-            y = torch.ones_like(pos_scores)
+                pos_scores = model.score(entity_emb, heads, tails)
+                neg_scores = model.score(entity_emb, heads, tails_neg)
+                y = torch.ones_like(pos_scores)
 
-            loss = loss_fn(pos_scores, neg_scores, y)
-            loss.backward()
-            optimizer.step()
+                loss = loss_fn(pos_scores, neg_scores, y)
+                loss.backward()
+                optimizer.step()
 
-            losses.append(loss.item())
-            st.write(f"📚 Epoch {epoch+1}/{EPOCHS} - Loss: {loss.item():.4f}")
+                losses.append(loss.item())
+                st.write(f"📚 Epoch {epoch+1}/{EPOCHS} - Loss: {loss.item():.4f}")
 
         # Affichage graphique de la perte
         fig, ax = plt.subplots()
@@ -592,7 +626,7 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
 
         # ====== Évaluation =======
         model.eval()
-        entity_emb = model(edge_index.to(device), edge_type.to(device))
+        entity_emb = model(edge_index, edge_type)
 
         def evaluate_rgcn(entity_emb, test_triples, k=10):
             ranks = []
