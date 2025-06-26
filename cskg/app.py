@@ -47,7 +47,7 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     st.info("Ce module affiche les vulnérabilités extraites depuis la National Vulnerability Database (CVE, CWE, CPE).")
 
     st.sidebar.subheader("🎛️ Filtres spécifiques à KG1")
-    max_links = st.sidebar.slider("Nombre max de relations", 50, 1000, 200)
+    max_links = st.sidebar.slider("Nombre max de relations", 50, 1000000, 20000)
     min_cvss = st.sidebar.slider("Score CVSS minimum", 0.0, 10.0, 0.0)
     selected_entities = st.sidebar.multiselect("Entités à afficher", ["CVE", "CWE", "CPE", "Entity"], default=["CVE", "CWE", "CPE"])
 
@@ -57,7 +57,7 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
         MATCH (c:CVE)-[r]->(x)
         WHERE c.cvss_score >= {min_cvss}
         RETURN c.name AS source, type(r) AS relation, x.name AS target, labels(x)[0] AS target_type
-        LIMIT {limit}
+        #LIMIT {limit}
         """
         return graph_db.run(query).to_data_frame()
 
