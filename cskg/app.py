@@ -209,6 +209,7 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     st.dataframe(df, use_container_width=True)
 
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":import networkx as nx
+import networkx as nx
 from pyvis.network import Network
 import tempfile
 
@@ -269,7 +270,8 @@ with st.spinner("Chargement et génération du graphe fusionné..."):
         with open(html_file, 'r', encoding='utf-8') as f:
             html = f.read()
         st.components.v1.html(html, height=650)
-        os.unlink(html_file)  
+        os.unlink(html_file)
+  
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
     st.info("Module pour entraîner RotatE (ou TransE, ComplEx, etc.) et prédire des relations manquantes.")
