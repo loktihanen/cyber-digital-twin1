@@ -255,7 +255,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     try:
         df_same_as = graph_db.run("""
             MATCH (c1:CVE)-[r:SAME_AS]-(c2:CVE)
-            WHERE exists(r.method) AND exists(r.score)
+            WHERE r.method IS NOT NULL AND r.score IS NOT NULL
             RETURN c1.name AS CVE_NVD, c2.name AS CVE_NESSUS,
                    r.method AS Méthode, r.score AS Score
             ORDER BY r.score DESC
