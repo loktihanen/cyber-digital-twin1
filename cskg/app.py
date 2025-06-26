@@ -215,9 +215,9 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     import matplotlib.patches as mpatches
 
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
-    st.info("Visualisation en temps réel du graphe fusionné (NVD + Nessus) : CVE_UNIFIED, Plugin, Host, Service, etc.")
+    st.info("Visualisation du graphe résultant de la fusion entre les CVE NVD et Nessus (via SAME_AS → CVE_UNIFIED)")
 
-    # === Requête complète vers Neo4j pour nœuds et relations ===
+    # === Requête pour le graphe principal ===
     query = """
     MATCH (a)-[r]->(b)
     WHERE a:CVE OR a:CVE_UNIFIED OR a:Plugin OR a:Host OR a:Service
@@ -253,6 +253,26 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         G.add_node(tgt, type=tgt_type, label=tgt)
         G.add_edge(src, tgt, label=rel)
 
+    # === Récupération des statistiques de fusion et alignement ===
+    nb_unifies = graph_db.run("""
+        MATCH (c:CVE)-[:SAME_AS]-(n:CVE)
+        WHERE c.source = 'NVD' AND n.source = 'NESSUS'
+        WITH DISTINCT c.name AS cname
+        MATCH (u:CVE_UNIFIED {name: cname})
+        RETURN count(DISTINCT u) AS nb
+    """).evaluate()
+
+    total_fusionnees = graph_db.run("""
+        MATCH (c:CVE)-[:SAME_AS]-(n:CVE)
+        WHERE c.source = 'NVD' AND n.source = 'NESSUS'
+        RETURN count(DISTINCT c) AS total
+    """).evaluate()
+
+    same_as_total = graph_db.run("""
+        MATCH (:CVE)-[r:SAME_AS]-(:CVE)
+        RETURN count(r) AS total
+    """).evaluate()
+
     # === Visualisation PyVis ===
     def draw_pyvis_graph(G):
         net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
@@ -266,7 +286,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         net.save_graph(tmpfile.name)
         return tmpfile.name
 
-    # === PyVis dans Streamlit
+    # === Affichage PyVis
     st.subheader("🌐 Visualisation interactive (PyVis)")
     with st.spinner("🔄 Génération du graphe..."):
         html_path = draw_pyvis_graph(G)
@@ -283,28 +303,38 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     nx.draw_networkx_nodes(G, pos, node_size=600, node_color=node_colors)
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True)
     nx.draw_networkx_labels(G, pos, font_size=9)
-
     edge_labels = nx.get_edge_attributes(G, 'label')
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="orange", font_size=7)
 
     legend_patches = [mpatches.Patch(color=c, label=l) for l, c in color_map.items()]
     plt.legend(handles=legend_patches, loc="best", title="Types de nœuds")
-    plt.title("🔎 Visualisation du graphe de vulnérabilités (NVD + Nessus)", fontsize=16)
+    plt.title("🔎 Graphe des vulnérabilités fusionnées (CSKG3)", fontsize=16)
     plt.axis("off")
     st.pyplot(plt)
 
     # === Statistiques du graphe ===
-    st.markdown("### 📈 Statistiques du graphe")
+    st.markdown("### 📈 Statistiques CSKG3")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("🧠 Nœuds", G.number_of_nodes())
+        st.metric("🧠 Nœuds visibles", G.number_of_nodes())
     with col2:
-        st.metric("🔗 Relations", G.number_of_edges())
+        st.metric("🔗 Relations visibles", G.number_of_edges())
     with col3:
         st.metric("📊 Densité", f"{nx.density(G):.4f}")
+
     st.caption(f"⚠️ Lignes ignorées (valeurs nulles) : {skipped}")
 
-    # === Téléchargement RDF si présent ===
+    # === Statistiques de fusion ===
+    st.markdown("### 🧬 Alignement & Fusion CVE_UNIFIED")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("🔀 Relations SAME_AS", same_as_total)
+    with col2:
+        st.metric("✅ CVE fusionnées", total_fusionnees)
+    with col3:
+        st.metric("🧬 CVE_UNIFIED créées", nb_unifies)
+
+    # === Téléchargement RDF ===
     st.markdown("---")
     st.subheader("📤 RDF exporté (Turtle)")
     rdf_file = "kg_fusionne.ttl"
@@ -318,7 +348,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
             mime="text/turtle"
         )
     else:
-        st.warning("⚠️ Le fichier `kg_fusionne.ttl` est introuvable. Exécute `propagate_impacts.py` ou `rdf_export.py`.")
+        st.warning("⚠️ Le fichier `kg_fusionne.ttl` est introuvable. Exécute `rdf_export.py` ou `propagate_impacts.py`.")
 
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
