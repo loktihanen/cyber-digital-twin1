@@ -42,7 +42,8 @@ jobs:
         run: python cskg/visualization.py
       - name: Run RotatE Prediction
         run: python cskg/rotate_predict.py
-  
+      - name: Run load
+        run: python cskg/load_triples.py
 
 
 
