@@ -1,10 +1,11 @@
-# ======================== IMPORTS ========================
+import matplotlib.pyplot as plt
+# ======================== 0. IMPORTS ========================
 import streamlit as st
 from py2neo import Graph
 import pandas as pd
 import networkx as nx
-import matplotlib.pyplot as plt
-
+from pyvis.network import Network
+import os
 # ======================== CONFIGURATION STREAMLIT ========================
 st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
 st.title("🧠 Cyber Digital Twin Viewer (KG1 & KG2)")
@@ -27,61 +28,81 @@ try:
     print("Connexion Neo4j réussie :", info)
 except Exception as e:
     print("Erreur de connexion Neo4j :", e)
+# ======================== 2. TITLE ========================
+st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
+st.title("🛡️ Cyber Digital Twin : Visualisation du Knowledge Graph fusionné")
 
+st.markdown("""
+Ce tableau de bord visualise le **Knowledge Graph fusionné** entre les vulnérabilités publiques (NVD/CVE) et les vulnérabilités détectées par **Nessus**.  
+Utilise les ontologies **UCO**, **STUCCO** et des techniques de **NER**, **Embeddings** et **Alignement sémantique**.
+""")
 
-# ======================== QUERIES UTILITAIRES ========================
-def get_latest_cves(limit=10):
+# ======================== 3. PARAMÈTRES DE RECHERCHE ========================
+st.sidebar.header("🔎 Filtres")
+max_nodes = st.sidebar.slider("Nombre max de relations", min_value=50, max_value=1000, value=300)
+entity_filter = st.sidebar.multiselect("Types d'entité à inclure", options=["CVE", "CWE", "CPE", "Plugin", "Host", "Service", "Port"], default=["CVE", "Host", "Plugin"])
+min_cvss = st.sidebar.slider("Score CVSS minimum", 0.0, 10.0, 0.0)
+
+# ======================== 4. QUERY NEO4J ========================
+@st.cache_data
+def load_data(max_links, min_cvss):
     query = f"""
-    MATCH (c:CVE)
-    RETURN c.name AS ID, c.description AS Description, c.published AS Date
-    ORDER BY Date DESC
-    LIMIT {limit}
+    MATCH (c:CVE_UNIFIED)-[r]->(x)
+    WHERE c.cvss >= {min_cvss}
+    RETURN c.name AS source, type(r) AS relation, labels(x)[0] AS target_type, x.name AS target
+    LIMIT {max_links}
     """
     return graph.run(query).to_data_frame()
 
-def get_nessus_relations(limit=50):
-    query = f"""
-    MATCH (h:Host)-[:EXPOSES]->(p:Port)-[:RUNS_PLUGIN]->(pl:Plugin)-[:DETECTS]->(c:CVE)
-    RETURN h.name AS Host, p.number AS Port, pl.name AS Plugin, c.name AS CVE
-    LIMIT {limit}
-    """
-    return graph.run(query).to_data_frame()
+df = load_data(max_nodes, min_cvss)
 
-def get_knowledge_graph(limit=100):
-    query = f"""
-    MATCH (a)-[r]->(b)
-    RETURN a.name AS source, type(r) AS relation, b.name AS target
-    LIMIT {limit}
-    """
-    results = graph.run(query).data()
+if df.empty:
+    st.warning("Aucune relation trouvée avec les paramètres actuels.")
+    st.stop()
+
+# ======================== 5. CONSTRUCTION GRAPHE ========================
+@st.cache_data
+def build_network(df, allowed_types):
     G = nx.DiGraph()
-    for row in results:
-        G.add_edge(row["source"], row["target"], label=row["relation"])
+    for _, row in df.iterrows():
+        if row['target_type'] in allowed_types:
+            G.add_node(row['source'], type="CVE_UNIFIED")
+            G.add_node(row['target'], type=row['target_type'])
+            G.add_edge(row['source'], row['target'], label=row['relation'])
     return G
 
-# ======================== UI ========================
-tab1, tab2, tab3 = st.tabs(["📌 CVEs récentes", "🌐 Graphe interactif", "🔎 Relations Nessus"])
+G = build_network(df, entity_filter)
 
-with tab1:
-    st.subheader("📌 CVEs récentes (NVD)")
-    df_cves = get_latest_cves(limit=20)
-    st.dataframe(df_cves, use_container_width=True)
+# ======================== 6. VISUALISATION ========================
+st.subheader("🕸️ Graphe de connaissances (visualisation interactive)")
+net = Network(height="750px", width="100%", bgcolor="#1e1e1e", font_color="white")
 
-with tab2:
-    st.subheader("🌐 Graphe de Connaissances")
-    limit = st.slider("Nombre de relations affichées :", 10, 300, 100)
-    G = get_knowledge_graph(limit)
+color_map = {
+    "CVE_UNIFIED": "red", "CWE": "orange", "CPE": "blue",
+    "Host": "green", "Plugin": "purple", "Service": "yellow", "Port": "pink"
+}
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    pos = nx.spring_layout(G, k=0.5)
-    nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color='gray',
-            node_size=800, font_size=8, ax=ax)
-    edge_labels = nx.get_edge_attributes(G, 'label')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=7)
-    st.pyplot(fig)
+for node, attr in G.nodes(data=True):
+    node_type = attr.get("type", "Other")
+    color = color_map.get(node_type, "gray")
+    net.add_node(node, label=node, color=color)
 
-with tab3:
-    st.subheader("🔎 Relations Host/Plugin/CVE (Nessus)")
-    df_nessus = get_nessus_relations()
-    st.dataframe(df_nessus, use_container_width=True)
+for src, tgt, edge in G.edges(data=True):
+    net.add_edge(src, tgt, label=edge.get("label", ""))
+
+output_path = "/tmp/graph.html"
+net.show(output_path)
+
+with open(output_path, 'r', encoding='utf-8') as f:
+    html_content = f.read()
+    st.components.v1.html(html_content, height=750, scrolling=True)
+
+# ======================== 7. TABLEAUX ========================
+st.subheader("📄 Relations extraites")
+st.dataframe(df, use_container_width=True)
+
+# ======================== 8. INFOS ========================
+st.sidebar.markdown("---")
+st.sidebar.info("Projet de M2 • Intégration KG1 (NVD) + KG2 (Nessus) • Alignement + Embeddings + Digital Twin • Visualisation interactive")
+
 
