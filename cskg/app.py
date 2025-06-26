@@ -472,181 +472,181 @@ elif menu_choice == "🔮 Embeddings & RotatE Prediction":
 
     st.success("✅ Module RotatE exécuté avec succès.")
     
-elif menu_choice == "📈 R-GCN & Relation Prediction":
-    st.header("🧠 R-GCN – Raisonnement sur le graphe de vulnérabilités")
-    st.info("Cette section utilise un modèle R-GCN pour évaluer l'impact et la propagation des vulnérabilités sur l'infrastructure.")
+#elif menu_choice == "📈 R-GCN & Relation Prediction":
+   # st.header("🧠 R-GCN – Raisonnement sur le graphe de vulnérabilités")
+   # st.info("Cette section utilise un modèle R-GCN pour évaluer l'impact et la propagation des vulnérabilités sur l'infrastructure.")
 
-    import torch
-    import torch.nn as nn
-    import torch.optim as optim
-    import numpy as np
-    import pandas as pd
-    import networkx as nx
-    import matplotlib.pyplot as plt
-    from sklearn.model_selection import train_test_split
+   # import torch
+  #  import torch.nn as nn
+#    import torch.optim as optim
+    #import numpy as np
+   # import pandas as pd
+  #  import networkx as nx
+  #  import matplotlib.pyplot as plt
+   # from sklearn.model_selection import train_test_split
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+   # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ======================== 1. EXTRACTION DES TRIPLES ========================
-    query = """
-    MATCH (s:CVE_UNIFIED)-[r]->(o)
-    WHERE s.name IS NOT NULL AND o.name IS NOT NULL
-    RETURN s.name AS head, type(r) AS relation, o.name AS tail
-    """
-    data = graph_db.run(query).to_data_frame().dropna()
+   # query = """
+   # MATCH (s:CVE_UNIFIED)-[r]->(o)
+   # WHERE s.name IS NOT NULL AND o.name IS NOT NULL
+   # RETURN s.name AS head, type(r) AS relation, o.name AS tail
+  #  """
+  #  data = graph_db.run(query).to_data_frame().dropna()
 
-    all_entities = pd.Index(data['head'].tolist() + data['tail'].tolist()).unique()
-    all_relations = pd.Index(data['relation']).unique()
-    entity2id = {e: i for i, e in enumerate(all_entities)}
-    relation2id = {r: i for i, r in enumerate(all_relations)}
-    id2entity = {i: e for e, i in entity2id.items()}
-    id2rel = {i: r for r, i in relation2id.items()}
+  #  all_entities = pd.Index(data['head'].tolist() + data['tail'].tolist()).unique()
+ #   all_relations = pd.Index(data['relation']).unique()
+  #  entity2id = {e: i for i, e in enumerate(all_entities)}
+    #relation2id = {r: i for i, r in enumerate(all_relations)}
+    #id2entity = {i: e for e, i in entity2id.items()}
+   # id2rel = {i: r for r, i in relation2id.items()}
 
-    triplets = np.array([(entity2id[h], relation2id[r], entity2id[t]) for h, r, t in data.values])
-    train_triples, test_triples = train_test_split(triplets, test_size=0.1, random_state=42)
+    #triplets = np.array([(entity2id[h], relation2id[r], entity2id[t]) for h, r, t in data.values])
+   # train_triples, test_triples = train_test_split(triplets, test_size=0.1, random_state=42)
 
     # ======================== 2. MODÈLE R-GCN ========================
-    class RGCNLayer(nn.Module):
-        def __init__(self, in_dim, out_dim, num_rels):
-            super().__init__()
-            self.weight = nn.Parameter(torch.Tensor(num_rels, in_dim, out_dim))
-            self.self_loop_weight = nn.Parameter(torch.Tensor(in_dim, out_dim))
-            self.bias = nn.Parameter(torch.Tensor(out_dim))
-            nn.init.xavier_uniform_(self.weight)
-            nn.init.xavier_uniform_(self.self_loop_weight)
-            nn.init.zeros_(self.bias)
+    #class RGCNLayer(nn.Module):
+        #def __init__(self, in_dim, out_dim, num_rels):
+           # super().__init__()
+            #self.weight = nn.Parameter(torch.Tensor(num_rels, in_dim, out_dim))
+            #self.self_loop_weight = nn.Parameter(torch.Tensor(in_dim, out_dim))
+            #self.bias = nn.Parameter(torch.Tensor(out_dim))
+            #nn.init.xavier_uniform_(self.weight)
+            #nn.init.xavier_uniform_(self.self_loop_weight)
+           # nn.init.zeros_(self.bias)
 
-        def forward(self, entity_emb, edge_index, edge_type, num_entities):
-            out = torch.zeros_like(entity_emb)
-            for i in range(edge_index.size(1)):
-                src = edge_index[0, i]
-                dst = edge_index[1, i]
-                rel = edge_type[i]
-                out[dst] += torch.matmul(entity_emb[src], self.weight[rel])
-            out += torch.matmul(entity_emb, self.self_loop_weight)
-            out += self.bias
-            return torch.relu(out)
+        #def forward(self, entity_emb, edge_index, edge_type, num_entities):
+           # out = torch.zeros_like(entity_emb)
+           # for i in range(edge_index.size(1)):
+               # src = edge_index[0, i]
+               # dst = edge_index[1, i]
+               # rel = edge_type[i]
+            #    out[dst] += torch.matmul(entity_emb[src], self.weight[rel])
+           # out += torch.matmul(entity_emb, self.self_loop_weight)
+            #out += self.bias
+          #  return torch.relu(out)
 
-    class RGCN(nn.Module):
-        def __init__(self, num_entities, num_relations, emb_dim=128, num_layers=2):
-            super().__init__()
-            self.emb_dim = emb_dim
-            self.entity_emb = nn.Embedding(num_entities, emb_dim)
-            self.layers = nn.ModuleList([
-                RGCNLayer(emb_dim, emb_dim, num_relations) for _ in range(num_layers)
-            ])
-            self.score_fn = lambda h, t: -torch.norm(h - t, p=1, dim=1)
+    #class RGCN(nn.Module):
+       # def __init__(self, num_entities, num_relations, emb_dim=128, num_layers=2):
+            #super().__init__()
+           # self.emb_dim = emb_dim
+           # self.entity_emb = nn.Embedding(num_entities, emb_dim)
+          #  self.layers = nn.ModuleList([
+              #  RGCNLayer(emb_dim, emb_dim, num_relations) for _ in range(num_layers)
+           # ])
+          #  self.score_fn = lambda h, t: -torch.norm(h - t, p=1, dim=1)
 
-        def forward(self, edge_index, edge_type):
-            x = self.entity_emb.weight
-            for layer in self.layers:
-                x = layer(x, edge_index, edge_type, x.size(0))
-            return x
+     #   def forward(self, edge_index, edge_type):
+          #  x = self.entity_emb.weight
+            #for layer in self.layers:
+               # x = layer(x, edge_index, edge_type, x.size(0))
+          #  return x
 
-        def score(self, entity_emb, head_idx, tail_idx):
-            h = entity_emb[head_idx]
-            t = entity_emb[tail_idx]
-            return self.score_fn(h, t)
+        #def score(self, entity_emb, head_idx, tail_idx):
+           # h = entity_emb[head_idx]
+        #    t = entity_emb[tail_idx]
+         #   return self.score_fn(h, t)
 
     # ======================== 3. ENTRAÎNEMENT ========================
-    edge_index = torch.tensor([[h, t] for h, r, t in train_triples], dtype=torch.long).t()
-    edge_type = torch.tensor([r for h, r, t in train_triples], dtype=torch.long)
+    #edge_index = torch.tensor([[h, t] for h, r, t in train_triples], dtype=torch.long).t()
+    #edge_type = torch.tensor([r for h, r, t in train_triples], dtype=torch.long)
 
-    model = RGCN(len(entity2id), len(relation2id)).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    loss_fn = nn.MarginRankingLoss(margin=1.0)
+   # model = RGCN(len(entity2id), len(relation2id)).to(device)
+   # optimizer = optim.Adam(model.parameters(), lr=1e-3)
+  #  loss_fn = nn.MarginRankingLoss(margin=1.0)
 
-    EPOCHS = 2
-    for epoch in range(EPOCHS):
-        model.train()
-        optimizer.zero_grad()
-        entity_emb = model(edge_index.to(device), edge_type.to(device))
-        idx = np.random.choice(len(train_triples), 512)
-        batch = train_triples[idx]
-        heads = torch.tensor(batch[:, 0]).to(device)
-        tails = torch.tensor(batch[:, 2]).to(device)
-        tails_neg = torch.randint(0, len(entity2id), (len(batch),)).to(device)
-        pos_scores = model.score(entity_emb, heads, tails)
-        neg_scores = model.score(entity_emb, heads, tails_neg)
-        y = torch.ones_like(pos_scores)
-        loss = loss_fn(pos_scores, neg_scores, y)
-        loss.backward()
-        optimizer.step()
-        st.write(f"📉 Epoch {epoch+1}/{EPOCHS} - Loss: {loss.item():.4f}")
+    #EPOCHS = 2
+    #for epoch in range(EPOCHS):
+       # model.train()
+       # optimizer.zero_grad()
+      #  entity_emb = model(edge_index.to(device), edge_type.to(device))
+        #idx = np.random.choice(len(train_triples), 512)
+       # batch = train_triples[idx]
+        #heads = torch.tensor(batch[:, 0]).to(device)
+       # tails = torch.tensor(batch[:, 2]).to(device)
+      #  tails_neg = torch.randint(0, len(entity2id), (len(batch),)).to(device)
+        #pos_scores = model.score(entity_emb, heads, tails)
+       # neg_scores = model.score(entity_emb, heads, tails_neg)
+      #  y = torch.ones_like(pos_scores)
+       # loss = loss_fn(pos_scores, neg_scores, y)
+       # loss.backward()
+      #  optimizer.step()
+      #  st.write(f"📉 Epoch {epoch+1}/{EPOCHS} - Loss: {loss.item():.4f}")
 
     # ======================== 4. ÉVALUATION ========================
-    def evaluate_rgcn(entity_emb, test_triples, k=10):
-        ranks = []
-        hits = 0
-        for h, r, t in test_triples:
-            scores = model.score(entity_emb, torch.tensor([h]*len(entity_emb)).to(device), torch.arange(len(entity_emb)).to(device))
-            _, indices = torch.sort(scores, descending=True)
-            rank = (indices == t).nonzero(as_tuple=False).item() + 1
-            ranks.append(rank)
-            if rank <= k:
-                hits += 1
-        mrr = np.mean([1.0 / r for r in ranks])
-        st.success(f"📊 Évaluation R-GCN: MRR = {mrr:.4f}, Hits@{k} = {hits/len(test_triples):.4f}")
+    #def evaluate_rgcn(entity_emb, test_triples, k=10):
+       # ranks = []
+      #  hits = 0
+      #  for h, r, t in test_triples:
+           # scores = model.score(entity_emb, torch.tensor([h]*len(entity_emb)).to(device), torch.arange(len(entity_emb)).to(device))
+          #  _, indices = torch.sort(scores, descending=True)
+           # rank = (indices == t).nonzero(as_tuple=False).item() + 1
+          #  ranks.append(rank)
+          #  if rank <= k:
+          #      hits += 1
+      #  mrr = np.mean([1.0 / r for r in ranks])
+       # st.success(f"📊 Évaluation R-GCN: MRR = {mrr:.4f}, Hits@{k} = {hits/len(test_triples):.4f}")
 
-    model.eval()
-    entity_emb = model(edge_index.to(device), edge_type.to(device))
-    evaluate_rgcn(entity_emb, test_triples)
+   # model.eval()
+    #entity_emb = model(edge_index.to(device), edge_type.to(device))
+    #evaluate_rgcn(entity_emb, test_triples)
 
     # ======================== 5. SCORING DES HÔTES ========================
-    def compute_host_vuln_scores(hosts, impact_rel_id, entity2id, entity_emb):
-        scores = {}
-        for host in hosts:
-            if host not in entity2id:
-                continue
-            host_id = entity2id[host]
-            cves = [e for e in entity2id if "CVE" in e]
-            cve_ids = [entity2id[c] for c in cves]
-            h_tensor = torch.tensor([host_id]*len(cve_ids)).to(device)
-            c_tensor = torch.tensor(cve_ids).to(device)
-            with torch.no_grad():
-                s = model.score(entity_emb, c_tensor, h_tensor).cpu().numpy().sum()
-            scores[host] = s
-        return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
+    #def compute_host_vuln_scores(hosts, impact_rel_id, entity2id, entity_emb):
+      #  scores = {}
+        #for host in hosts:
+           # if host not in entity2id:
+            #    continue
+            #host_id = entity2id[host]
+           # cves = [e for e in entity2id if "CVE" in e]
+           # cve_ids = [entity2id[c] for c in cves]
+        #    h_tensor = torch.tensor([host_id]*len(cve_ids)).to(device)
+          #  c_tensor = torch.tensor(cve_ids).to(device)
+          #  with torch.no_grad():
+          #      s = model.score(entity_emb, c_tensor, h_tensor).cpu().numpy().sum()
+          #  scores[host] = s
+        #return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
 
-    st.subheader("🔎 Top 10 hôtes vulnérables (R-GCN)")
-    hosts = [e for e in entity2id if "Host" in e or "Windows" in e]
-    impact_rel_id = relation2id.get("IMPACTS", 0)
-    scores = compute_host_vuln_scores(hosts, impact_rel_id, entity2id, entity_emb)
-    df_scores = pd.DataFrame(list(scores.items())[:10], columns=["Host", "Score"])
-    st.dataframe(df_scores)
+   # st.subheader("🔎 Top 10 hôtes vulnérables (R-GCN)")
+    #hosts = [e for e in entity2id if "Host" in e or "Windows" in e]
+   # impact_rel_id = relation2id.get("IMPACTS", 0)
+   # scores = compute_host_vuln_scores(hosts, impact_rel_id, entity2id, entity_emb)
+   # df_scores = pd.DataFrame(list(scores.items())[:10], columns=["Host", "Score"])
+   # st.dataframe(df_scores)
 
     # ======================== 6. PROPAGATION VISUELLE ========================
-    def build_graph(triplets, id2e, id2r):
-        G = nx.DiGraph()
-        for h, r, t in triplets:
-            G.add_edge(id2e[h], id2e[t], label=id2r[r])
-        return G
+   # def build_graph(triplets, id2e, id2r):
+     #   G = nx.DiGraph()
+      #  for h, r, t in triplets:
+          #  G.add_edge(id2e[h], id2e[t], label=id2r[r])
+      #  return G
 
-    def propagate(G, init_scores, max_steps=3, decay=0.6):
-        propagated = dict(init_scores)
-        frontier = list(init_scores.keys())
-        for _ in range(max_steps):
-            new_frontier = []
-            for node in frontier:
-                for neigh in G.successors(node):
-                    score = propagated[node] * decay
-                    if score > propagated.get(neigh, 0):
-                        propagated[neigh] = score
-                        new_frontier.append(neigh)
-            frontier = new_frontier
-        return propagated
+    #def propagate(G, init_scores, max_steps=3, decay=0.6):
+      #  propagated = dict(init_scores)
+      #  frontier = list(init_scores.keys())
+     #   for _ in range(max_steps):
+          #  new_frontier = []
+           # for node in frontier:
+             #   for neigh in G.successors(node):
+               #     score = propagated[node] * decay
+              #      if score > propagated.get(neigh, 0):
+                #        propagated[neigh] = score
+                  #      new_frontier.append(neigh)
+         #   frontier = new_frontier
+      #  return propagated
 
-    G_nx = build_graph(train_triples, id2entity, id2rel)
-    propagated = propagate(G_nx, scores)
+  #  G_nx = build_graph(train_triples, id2entity, id2rel)
+   # propagated = propagate(G_nx, scores)
 
-    top20 = sorted(propagated.items(), key=lambda x: x[1], reverse=True)[:20]
-    st.subheader("📈 Propagation de vulnérabilité")
-    plt.figure(figsize=(12, 6))
-    plt.barh([n for n, _ in top20], [s for _, s in top20], color='darkred')
-    plt.xlabel("Score propagé (R-GCN)")
-    plt.title("Top 20 entités impactées (après propagation)")
-    plt.gca().invert_yaxis()
-    st.pyplot(plt.gcf())
+ #   top20 = sorted(propagated.items(), key=lambda x: x[1], reverse=True)[:20]
+#    st.subheader("📈 Propagation de vulnérabilité")
+ #   plt.figure(figsize=(12, 6))
+ #   plt.barh([n for n, _ in top20], [s for _, s in top20], color='darkred')
+ #   plt.xlabel("Score propagé (R-GCN)")
+    #plt.title("Top 20 entités impactées (après propagation)")
+   # plt.gca().invert_yaxis()
+   # st.pyplot(plt.gcf())
 
 elif menu_choice == "🧪 Simulation & Digital Twin":
     st.header("🧪 Simulation avec le Jumeau Numérique")
