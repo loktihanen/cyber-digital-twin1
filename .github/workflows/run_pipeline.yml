@@ -40,6 +40,9 @@ jobs:
 
       - name: Generate Visualizations
         run: python cskg/visualization.py
+      - name: Run RotatE Prediction
+        run: python cskg/rotate_predict.py
+  
 
 
 
