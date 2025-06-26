@@ -232,20 +232,29 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     st.markdown("---")
 
-    # === Construction du graphe enrichi ===
+    # === Construction du graphe enrichi limité à 500 nœuds ===
     def build_cskg3_graph():
         query_nodes = """
         MATCH (n)
         WHERE n:CVE_UNIFIED OR n:CVE OR n:Plugin OR n:Host OR n:OS OR n:Port OR n:Service OR n:Software OR n:CPE OR n:CWE OR n:IP OR n:Application
         RETURN id(n) AS id, n.name AS name, labels(n)[0] AS label, n.severity AS severity
+        LIMIT 500
         """
+
         query_edges = """
         MATCH (a)-[r]->(b)
-        WHERE id(a) IS NOT NULL AND id(b) IS NOT NULL
-          AND (a:CVE_UNIFIED OR a:CVE OR a:Plugin OR a:Host OR a:OS OR a:Port OR a:Service OR a:Software OR a:CPE OR a:CWE OR a:IP OR a:Application)
-          AND (b:CVE_UNIFIED OR b:CVE OR b:Plugin OR b:Host OR b:OS OR b:Port OR b:Service OR b:Software OR b:CPE OR b:CWE OR b:IP OR b:Application)
+        WHERE id(a) IN (
+            MATCH (n)
+            WHERE n:CVE_UNIFIED OR n:CVE OR n:Plugin OR n:Host OR n:OS OR n:Port OR n:Service OR n:Software OR n:CPE OR n:CWE OR n:IP OR n:Application
+            RETURN id(n) LIMIT 500
+        ) AND id(b) IN (
+            MATCH (n)
+            WHERE n:CVE_UNIFIED OR n:CVE OR n:Plugin OR n:Host OR n:OS OR n:Port OR n:Service OR n:Software OR n:CPE OR n:CWE OR n:IP OR n:Application
+            RETURN id(n) LIMIT 500
+        )
         RETURN id(a) AS source, id(b) AS target, type(r) AS relation
         """
+
         nodes = graph_db.run(query_nodes).data()
         edges = graph_db.run(query_edges).data()
 
@@ -291,10 +300,11 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         net.save_graph(tmpfile.name)
         return tmpfile.name
 
+    # --- Affichage PyVis
     with st.spinner("Chargement et génération du graphe fusionné..."):
         G = build_cskg3_graph()
         if len(G.nodes) == 0:
-            st.warning("Le graphe est vide.")
+            st.warning("⚠️ Le graphe est vide.")
         else:
             html_path = draw_pyvis_graph(G)
             with open(html_path, 'r', encoding='utf-8') as f:
@@ -302,11 +312,11 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
             st.components.v1.html(html, height=700, scrolling=True)
             os.unlink(html_path)
 
-    # --- Statistiques
+    # --- Statistiques locales du graphe affiché
     st.markdown("---")
-    st.markdown("### 📊 Statistiques du graphe enrichi")
-    st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
-    st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
+    st.markdown("### 📊 Statistiques du graphe enrichi affiché")
+    st.markdown(f"- **Nœuds affichés** : {G.number_of_nodes()}")
+    st.markdown(f"- **Relations affichées** : {G.number_of_edges()}")
     st.markdown(f"- **Densité** : {nx.density(G):.6f}")
 
     # --- Export RDF fusionné
