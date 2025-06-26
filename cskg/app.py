@@ -216,103 +216,77 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     import pandas as pd
 
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
-    st.info("Visualisation interactive du graphe fusionné (CVE_UNIFIED et relations SAME_AS).")
+    st.info("Visualisation interactive du graphe fusionné (vulnérabilités, plugins, hôtes, OS, ports, applications, etc.)")
 
-    # --- Statistiques de fusion
+    # --- Statistiques générales
     col1, col2, col3 = st.columns(3)
-
     with col1:
-        try:
-            total_same_as = graph_db.run("MATCH ()-[r:SAME_AS]->() RETURN count(r) AS total").evaluate()
-            st.metric("🔗 Relations SAME_AS", total_same_as)
-        except Exception as e:
-            st.error("❌ Erreur lors du comptage des relations SAME_AS.")
-            st.exception(e)
-
+        total_nodes = graph_db.run("MATCH (n) RETURN count(n)").evaluate()
+        st.metric("🧠 Nœuds total", total_nodes)
     with col2:
-        try:
-            total_unified = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN count(u) AS total").evaluate()
-            st.metric("🧬 CVE_UNIFIED", total_unified)
-        except Exception as e:
-            st.error("❌ Erreur lors du comptage des CVE_UNIFIED.")
-            st.exception(e)
-
+        total_edges = graph_db.run("MATCH ()-[r]->() RETURN count(r)").evaluate()
+        st.metric("🔗 Relations total", total_edges)
     with col3:
-        try:
-            total_aligned = graph_db.run("""
-                MATCH (c1:CVE)-[:SAME_AS]-(c2:CVE)
-                WHERE c1.source = 'NVD' AND c2.source = 'NESSUS'
-                RETURN count(DISTINCT c1) AS count
-            """).evaluate()
-            st.metric("🪢 CVE alignées NVD + Nessus", total_aligned)
-        except Exception as e:
-            st.error("❌ Erreur lors du comptage des CVE alignées.")
-            st.exception(e)
+        total_cve_unified = graph_db.run("MATCH (n:CVE_UNIFIED) RETURN count(n)").evaluate()
+        st.metric("🧬 CVE_UNIFIED", total_cve_unified)
 
     st.markdown("---")
 
-    # --- Tableau des correspondances SAME_AS avec méthode et score
-    try:
-        df_same_as = graph_db.run("""
-            MATCH (c1:CVE)-[r:SAME_AS]-(c2:CVE)
-            WHERE r.method IS NOT NULL AND r.score IS NOT NULL
-            RETURN c1.name AS CVE_NVD, c2.name AS CVE_NESSUS,
-                   r.method AS Méthode, r.score AS Score
-            ORDER BY r.score DESC
-            LIMIT 100
-        """).to_data_frame()
-
-        st.subheader("📄 Extrait des alignements SAME_AS (méthode & score)")
-        st.dataframe(df_same_as, use_container_width=True)
-
-    except Exception as e:
-        st.error("❌ Erreur lors du chargement des relations SAME_AS.")
-        st.exception(e)
-
-    st.markdown("---")
-
+    # === Construction du graphe enrichi ===
     def build_cskg3_graph():
-        nodes = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN u.name AS name, u.severity AS severity").data()
-        rels = graph_db.run("""
-            MATCH (c1:CVE_UNIFIED)-[:SAME_AS]-(c2:CVE_UNIFIED)
-            RETURN c1.name AS from, c2.name AS to
-        """).data()
+        query_nodes = """
+        MATCH (n)
+        WHERE n:CVE_UNIFIED OR n:CVE OR n:Plugin OR n:Host OR n:OS OR n:Port OR n:Service OR n:Software OR n:CPE OR n:CWE OR n:IP OR n:Application
+        RETURN id(n) AS id, n.name AS name, labels(n)[0] AS label, n.severity AS severity
+        """
+        query_edges = """
+        MATCH (a)-[r]->(b)
+        WHERE id(a) IS NOT NULL AND id(b) IS NOT NULL
+          AND (a:CVE_UNIFIED OR a:CVE OR a:Plugin OR a:Host OR a:OS OR a:Port OR a:Service OR a:Software OR a:CPE OR a:CWE OR a:IP OR a:Application)
+          AND (b:CVE_UNIFIED OR b:CVE OR b:Plugin OR b:Host OR b:OS OR b:Port OR b:Service OR b:Software OR b:CPE OR b:CWE OR b:IP OR b:Application)
+        RETURN id(a) AS source, id(b) AS target, type(r) AS relation
+        """
+        nodes = graph_db.run(query_nodes).data()
+        edges = graph_db.run(query_edges).data()
 
-        G = nx.Graph()
+        G = nx.DiGraph()
         for n in nodes:
-            # Assurer que severity est bien une chaîne ou None
-            sev = n.get("severity")
-            if sev is None:
-                sev = "unknown"
-            G.add_node(n["name"], severity=sev)
-        for r in rels:
-            if r["from"] != r["to"]:
-                G.add_edge(r["from"], r["to"])
+            severity = n.get("severity", "unknown") or "unknown"
+            G.add_node(n["id"], label=n["name"], type=n["label"], severity=severity)
+        for e in edges:
+            G.add_edge(e["source"], e["target"], label=e["relation"])
         return G
 
     def draw_pyvis_graph(G):
-        net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
-        net.from_nx(G)
-        for node in net.nodes:
-            node_id = node.get("id") or node.get("label")
-            sev = ""
-            if node_id and node_id in G.nodes:
-                attr = G.nodes[node_id]
-                # Vérifier que attr est dict et que severity est une string
-                if isinstance(attr, dict):
-                    sev_raw = attr.get("severity", "")
-                    if isinstance(sev_raw, str):
-                        sev = sev_raw.lower()
-            # Couleur selon la sévérité
-            if sev == "critical":
-                node["color"] = "red"
-            elif sev == "high":
-                node["color"] = "orange"
-            elif sev == "medium":
-                node["color"] = "yellow"
-            else:
-                node["color"] = "lightblue"
-            node["title"] = f"Sévérité : {sev}"
+        net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", notebook=False)
+        color_map = {
+            "CVE_UNIFIED": "#ff4d4d", "CVE": "#ff9999", "CPE": "#6699cc", "CWE": "#ffa500",
+            "Plugin": "#66ccff", "Host": "#00cc66", "Service": "#ffaa00", "OS": "#cc00cc",
+            "Port": "#9966cc", "Software": "#cc9966", "IP": "#00cccc", "Application": "#aaff00"
+        }
+
+        for node_id, data in G.nodes(data=True):
+            node_type = data.get("type", "Unknown")
+            node_label = data.get("label", str(node_id))
+            severity = data.get("severity", "unknown").lower()
+
+            color = color_map.get(node_type, "lightgray")
+            if node_type == "CVE_UNIFIED":
+                if severity == "critical":
+                    color = "red"
+                elif severity == "high":
+                    color = "orange"
+                elif severity == "medium":
+                    color = "yellow"
+                else:
+                    color = "lightblue"
+
+            net.add_node(node_id, label=node_label, color=color,
+                         title=f"{node_type} | Sévérité: {severity}")
+
+        for src, tgt, data in G.edges(data=True):
+            net.add_edge(src, tgt, title=data.get("label", ""))
+
         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
         net.save_graph(tmpfile.name)
         return tmpfile.name
@@ -320,17 +294,23 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     with st.spinner("Chargement et génération du graphe fusionné..."):
         G = build_cskg3_graph()
         if len(G.nodes) == 0:
-            st.warning("Le graphe fusionné est vide ou n'a pas encore été généré.")
+            st.warning("Le graphe est vide.")
         else:
             html_path = draw_pyvis_graph(G)
             with open(html_path, 'r', encoding='utf-8') as f:
                 html = f.read()
-            st.components.v1.html(html, height=650)
+            st.components.v1.html(html, height=700, scrolling=True)
             os.unlink(html_path)
 
+    # --- Statistiques
     st.markdown("---")
+    st.markdown("### 📊 Statistiques du graphe enrichi")
+    st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
+    st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
+    st.markdown(f"- **Densité** : {nx.density(G):.6f}")
 
-    # --- Téléchargement RDF fusionné
+    # --- Export RDF fusionné
+    st.markdown("---")
     st.subheader("📤 Téléchargement du fichier RDF fusionné")
     rdf_file = "kg_fusionne.ttl"
     if os.path.exists(rdf_file):
