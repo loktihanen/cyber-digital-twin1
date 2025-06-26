@@ -8,11 +8,13 @@ import os
 
 # ======================== 2. CONNEXION NEO4J =======================
 
+
 uri = os.environ.get("NEO4J_URI")
 user = os.environ.get("NEO4J_USER")
 password = os.environ.get("NEO4J_PASSWORD")
 
 graph = Graph(uri, auth=(user, password))
+
 
 
 # ======================== 3. ONTOLOGIE RDF ========================
