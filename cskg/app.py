@@ -3,6 +3,10 @@ import streamlit as st
 from py2neo import Graph
 from PIL import Image
 import os
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
 # ======================== ⚙️ CONFIGURATION ========================
 st.set_page_config(page_title="Cyber Digital Twin Dashboard", layout="wide")
 st.title("🧠 Cyber Digital Twin – Menu principal")
@@ -36,7 +40,8 @@ menu_choice = st.sidebar.radio(
         "🔮 Embeddings & RotatE Prediction",
         "📈 R-GCN & Relation Prediction",
         "🧪 Simulation & Digital Twin",
-        "📊 Simulation Heatmap"
+        "📊 Simulation Heatmap",
+        "🧪 Simulation & Digital Twin2"
     ]
 )
 
@@ -688,6 +693,68 @@ elif menu_choice == "📊 Simulation Heatmap":
         with open(tmp_file.name, "r", encoding="utf-8") as f:
             html_content = f.read()
         components.html(html_content, height=650, scrolling=True)
+elif menu_choice == "🧪 Simulation & Digital Twin2":
+    st.header("🧪 Simulation avec le Jumeau Numérique")
+    st.markdown("""
+    Ce module s'inscrit dans le cadre de la recherche sur l'utilisation des **graphes de connaissance** 
+    et des **jumeaux numériques** pour analyser les vulnérabilités (CVE_UNIFIED) dans l'organisation.
+    """)
+
+    # 1. Extraction des données pondérées : CVE → Plugin → Host → Service
+    query = """
+    MATCH (c:CVE_UNIFIED)<-[:DETECTS]-(:Plugin)<-[:HAS_PLUGIN]-(:Host)-[:RUNS_SERVICE]->(s:Service)
+    RETURN c.name AS cve, s.name AS service, c.cvss AS score, c.first_detected AS first_detected, c.last_seen AS last_seen
+    """
+    df = graph_db.run(query).to_data_frame()
+
+    if df.empty:
+        st.error("❌ Aucune donnée trouvée pour CVE_UNIFIED → Services")
+        st.stop()
+
+    # 🎯 Filtrage des services critiques (ex: HTTP, DB)
+    services = df["service"].dropna().unique().tolist()
+    filtered_services = st.multiselect("🎯 Filtrer les services critiques (ex: HTTP, DB)", options=sorted(services))
+    if filtered_services:
+        df = df[df["service"].isin(filtered_services)]
+
+    # 2. Heatmap Services vs CVE (pondérée par CVSS)
+    pivot_df = df.dropna(subset=["cve", "service", "score"])
+    pivot_df = pivot_df.groupby(["service", "cve"]).agg({"score": "sum"}).reset_index()
+    heatmap_data = pivot_df.pivot(index="service", columns="cve", values="score").fillna(0)
+
+    st.subheader("🔥 Carte d’impact des vulnérabilités par service (pondéré par CVSS)")
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(heatmap_data, cmap="Reds", annot=False)
+    plt.title("Impact CVE_UNIFIED sur les services – Digital Twin")
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+    # 3. Graphique temporel : évolution de la criticité
+    st.subheader("⏳ Évolution temporelle du score de criticité (basé sur CVE)")
+    df_time = df.dropna(subset=["first_detected", "score"])
+    df_time["first_detected"] = pd.to_datetime(df_time["first_detected"], errors="coerce")
+    df_time = df_time.dropna(subset=["first_detected"])
+    df_time = df_time.groupby(pd.Grouper(key="first_detected", freq="M")).agg({"score": "sum"}).reset_index()
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(df_time["first_detected"], df_time["score"], marker="o", color="blue")
+    plt.title("Évolution mensuelle du score de criticité CVSS")
+    plt.xlabel("Date de première détection")
+    plt.ylabel("Score cumulé CVSS")
+    st.pyplot(plt.gcf())
+    plt.clf()
+
+    # 4. Vérification SAME_AS (fusion KG1 ↔ KG2 via CVE_UNIFIED)
+    st.subheader("🔁 Vérification des alignements SAME_AS dans le graphe de connaissance")
+    query_align = """
+    MATCH (c:CVE)-[:SAME_AS]-(n:CVE)-[:SAME_AS]-(u:CVE_UNIFIED)
+    RETURN count(DISTINCT u) AS total_aligned
+    """
+    nb = graph_db.run(query_align).evaluate()
+    st.success(f"✅ {nb} CVE_UNIFIED alignés via SAME_AS entre KG1 (NVD) et KG2 (Nessus)")
 
 # ======================== 🧠 INFOS DE FIN ========================
 st.sidebar.markdown("---")
