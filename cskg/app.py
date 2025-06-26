@@ -9,15 +9,25 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
 st.title("🧠 Cyber Digital Twin Viewer (KG1 & KG2)")
 
-# ======================== CONNEXION NEO4J ========================
-@st.cache_resource
-def connect_neo4j():
-    uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
-    user = "neo4j"
-    password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-    return Graph(uri, auth=(user, password))
+# ======================== 2. CONNEXION NEO4J ======================
+# Connexion Neo4j Aura Free avec paramètres codés en dur
 
-graph = connect_neo4j()
+from py2neo import Graph
+
+uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+user = "neo4j"
+password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+
+# Initialisation de la connexion au graphe Neo4j Aura
+graph = Graph(uri, auth=(user, password))
+
+# Test rapide de connexion (optionnel)
+try:
+    info = graph.run("RETURN 1").data()
+    print("Connexion Neo4j réussie :", info)
+except Exception as e:
+    print("Erreur de connexion Neo4j :", e)
+
 
 # ======================== QUERIES UTILITAIRES ========================
 def get_latest_cves(limit=10):
