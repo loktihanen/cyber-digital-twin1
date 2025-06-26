@@ -549,8 +549,6 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
         loss_fn = nn.MarginRankingLoss(margin=1.0)
 
-        st.write("⚙️ Entraînement du modèle R-GCN...")
-
         EPOCHS = st.number_input("Nombre d'époques", min_value=1, max_value=50, value=5, step=1)
 
         losses = []
