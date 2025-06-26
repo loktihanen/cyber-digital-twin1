@@ -6,7 +6,7 @@ import requests
 import time
 import os
 
-# ======================== 2. CONNEXION NEO4J =======================
+# ======================== 2. CONNEXION NEO4J ======================
 
 
 uri = os.environ.get("NEO4J_URI")
