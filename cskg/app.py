@@ -471,7 +471,6 @@ elif menu_choice == "🔮 Embeddings & RotatE Prediction":
         st.write(result)
 
     st.success("✅ Module RotatE exécuté avec succès.")
-
 elif menu_choice == "📈 R-GCN & Relation Prediction":
     import streamlit as st
     import torch
@@ -508,7 +507,7 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
             return torch.relu(out)
 
     class RGCN(nn.Module):
-        def __init__(self, num_entities, num_relations, emb_dim=100, num_layers=2):
+        def __init__(self, num_entities, num_relations, emb_dim=128, num_layers=2):
             super(RGCN, self).__init__()
             self.emb_dim = emb_dim
             self.num_entities = num_entities
@@ -529,7 +528,7 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
             t = entity_emb[tail_idx]
             return self.score_fn(h, t)
 
-    # ======= Vérification données dans session_state =======
+    # ======= Chargement et vérification données =======
     required_keys = ['train_triples', 'test_triples', 'entity2id', 'relation2id']
     if not all(k in st.session_state for k in required_keys):
         st.error(f"❌ Les données {', '.join(required_keys)} doivent être chargées au préalable dans st.session_state.")
@@ -542,9 +541,11 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
         hosts = [e for e in entity2id if e.startswith("Host")]
         impact_rel_id = relation2id.get("IMPACTS", 0)
 
+        # Préparation tenseurs pour le graphe
         edge_index = torch.tensor([[h, t] for h, r, t in train_triples], dtype=torch.long).t().to(device)
         edge_type = torch.tensor([r for h, r, t in train_triples], dtype=torch.long).to(device)
 
+        # Initialisation modèle, optimizer, loss
         model = RGCN(len(entity2id), len(relation2id), emb_dim=128).to(device)
         optimizer = optim.Adam(model.parameters(), lr=1e-3)
         loss_fn = nn.MarginRankingLoss(margin=1.0)
@@ -578,15 +579,15 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
                 losses.append(loss.item())
                 st.write(f"📚 Epoch {epoch+1}/{EPOCHS} - Loss: {loss.item():.4f}")
 
-        # Affichage graphique de la perte
+        # Affichage courbe de perte
         fig, ax = plt.subplots()
         ax.plot(range(1, EPOCHS+1), losses, marker='o')
-        ax.set_xlabel("Epoch")
+        ax.set_xlabel("Époque")
         ax.set_ylabel("Loss")
         ax.set_title("Courbe de perte durant l'entraînement R-GCN")
         st.pyplot(fig)
 
-        # ====== Évaluation =======
+        # Évaluation du modèle
         model.eval()
         entity_emb = model(edge_index, edge_type)
 
@@ -604,14 +605,13 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
                 ranks.append(rank)
                 if rank <= k:
                     hits += 1
-
             mrr = np.mean([1.0 / r for r in ranks])
             return mrr, hits / len(test_triples)
 
         mrr, hits_at_10 = evaluate_rgcn(entity_emb, test_triples)
         st.success(f"✅ Évaluation R-GCN : MRR = {mrr:.4f}, Hits@10 = {hits_at_10:.4f}")
 
-        # ===== Scoring des hôtes =====
+        # Scoring des hôtes vulnérables
         def compute_host_vuln_scores_rgcn(hosts, impact_rel_id, entity2id, entity_emb):
             scores = {}
             for host in hosts:
