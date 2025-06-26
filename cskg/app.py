@@ -41,7 +41,7 @@ menu_choice = st.sidebar.radio(
         "📈 R-GCN & Relation Prediction",
         "🧪 Simulation & Digital Twin",
         "📊 Simulation Heatmap",
-        "🧪 Simulation & Digital Twin2"
+        "🧪 Simulation & DTwin2"
     ]
 )
 
@@ -693,7 +693,7 @@ elif menu_choice == "📊 Simulation Heatmap":
         with open(tmp_file.name, "r", encoding="utf-8") as f:
             html_content = f.read()
         components.html(html_content, height=650, scrolling=True)
-elif menu_choice == "🧪 Simulation & Digital Twin2":
+elif menu_choice == "🧪 Simulation & DTwin2":
     st.header("🧪 Simulation avec le Jumeau Numérique")
     st.markdown("""
     Ce module s'inscrit dans le cadre de la recherche sur l'utilisation des **graphes de connaissance** 
