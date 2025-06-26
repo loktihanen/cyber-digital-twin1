@@ -1,0 +1,42 @@
+name: Run Cyber Digital Twin Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run KG1 (NVD)
+        run: python cskg/collect_nvd.py   # ✅ Corrigé
+
+      - name: Run KG2 (Nessus)
+        run: python cskg/inject_nessus.py
+
+      - name: Run Alignment & Fusion
+        run: |
+          python cskg/align_and_merge.py
+          python cskg/propagate_impacts.py
+
+      - name: Train Embeddings
+        run: python cskg/embeddings_train.py
+
+      - name: Run R-GCN Prediction
+        run: python cskg/r_gcn_predict.py
+
+      - name: Generate Visualizations
+        run: python cskg/visualization.py
