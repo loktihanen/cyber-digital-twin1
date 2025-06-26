@@ -1,20 +1,13 @@
-# ======================== app.py ========================
+# ======================== 📦 IMPORTS ========================
 import streamlit as st
-import pandas as pd
-import os
-import networkx as nx
-from pyvis.network import Network
-import streamlit.components.v1 as components
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from py2neo import Graph
-import tempfile
+from PIL import Image
 
-# ======================== 1. CONFIGURATION ========================
-st.set_page_config(layout="wide")
-st.title("🛡️ Cyber Digital Twin – Visualisation en temps réel")
+# ======================== ⚙️ CONFIGURATION ========================
+st.set_page_config(page_title="Cyber Digital Twin Dashboard", layout="wide")
+st.title("🧠 Cyber Digital Twin – Menu principal")
 
-# ======================== 2. CONNEXION NEO4J ========================
+# ======================== 🔐 CONNEXION NEO4J ========================
 @st.cache_resource
 def connect_neo4j():
     try:
@@ -31,86 +24,57 @@ def connect_neo4j():
 
 graph_db = connect_neo4j()
 
-# ======================== 3. REQUÊTE & CONSTRUCTION DU GRAPHE ========================
-def build_graph(kg: str, limit=300):
-    if kg == "KG1 - NVD":
-        query = f"""
-        MATCH (a:CVE)-[r]->(b)
-        RETURN a.name AS source, type(r) AS relation, b.name AS target,
-               labels(a)[0] AS source_type, labels(b)[0] AS target_type
-        LIMIT {limit}
-        """
-    else:
-        query = f"""
-        MATCH (a:CVE_UNIFIED)-[r]->(b)
-        RETURN a.name AS source, type(r) AS relation, b.name AS target,
-               labels(a)[0] AS source_type, labels(b)[0] AS target_type
-        LIMIT {limit}
-        """
-    data = graph_db.run(query).data()
-    G = nx.DiGraph()
-    for row in data:
-        src = row["source"]
-        tgt = row["target"]
-        rel = row["relation"]
-        src_type = row.get("source_type", "Other")
-        tgt_type = row.get("target_type", "Other")
+# ======================== 🧭 MENU PRINCIPAL ========================
+st.sidebar.title("🗂️ Navigation")
 
-    #  Skip si src ou tgt est None
-        if not src or not tgt:
-            continue
+menu_choice = st.sidebar.radio(
+    "Accès rapide aux modules :",
+    [
+        "📌 CSKG1 – NVD (vulnérabilités publiques)",
+        "🧩 CSKG2 – Nessus (scans internes)",
+        "🔀 CSKG3 – Fusion NVD + Nessus",
+        "🔮 Embeddings & RotatE Prediction",
+        "📈 R-GCN & Relation Prediction",
+        "🧪 Simulation & Digital Twin"
+    ]
+)
 
-        G.add_node(src, type=src_type, label=src)
-        G.add_node(tgt, type=tgt_type, label=tgt)
-        G.add_edge(src, tgt, label=rel)
+# ======================== 🎯 ROUTAGE DES MODULES ========================
+st.markdown("---")
 
-    return G
+if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
+    st.header("📌 CSKG1 – Graphe basé sur la NVD")
+    st.info("Ce module affiche les vulnérabilités extraites depuis la National Vulnerability Database (CVE, CWE, CPE).")
+    st.warning("🔧 À implémenter : visualisation interactive, filtrage par CVSS, etc.")
 
-# ======================== 4. VISUALISATION PYVIS ========================
-def show_pyvis(G):
-    net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
-    color_map = {
-        "CVE": "#ff4d4d", "CVE_UNIFIED": "#ffcc00", "CWE": "#ffa500", "CPE": "#6699cc",
-        "Host": "#00cc66", "Plugin": "#66ccff", "Port": "#9966cc", "Service": "#ff9900", "Entity": "#dddd00"
-    }
-    for node, data in G.nodes(data=True):
-        net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
-    for src, tgt, data in G.edges(data=True):
-        net.add_edge(src, tgt, label=data.get("label", ""))
+elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
+    st.header("🧩 CSKG2 – Graphe basé sur les scans Nessus")
+    st.info("Ce module permet d'explorer les vulnérabilités détectées sur ton infrastructure via Nessus.")
+    st.warning("🔧 À implémenter : affichage des hôtes, plugins, CVE liés.")
 
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-    net.save_graph(tmp_file.name)
-    with open(tmp_file.name, 'r') as f:
-        components.html(f.read(), height=700, scrolling=True)
+elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
+    st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
+    st.info("Fusion des graphes KG1 & KG2 avec alignement sémantique, enrichissement, et raisonnement.")
+    st.warning("🔧 À implémenter : graphe unifié avec liens SAME_AS, propagation, etc.")
 
-# ======================== 5. VISUALISATION STATIQUE MATPLOTLIB ========================
-def show_static_plot(G):
-    color_map_mpl = {
-        "CVE": "red", "CWE": "orange", "CPE": "blue", "Entity": "green"
-    }
-    node_colors = [color_map_mpl.get(G.nodes[n].get("type", "Other"), "gray") for n in G.nodes()]
-    pos = nx.spring_layout(G, k=0.15, iterations=20, seed=42)
+elif menu_choice == "🔮 Embeddings & RotatE Prediction":
+    st.header("🔮 Embeddings & Prédiction avec RotatE")
+    st.info("Module pour entraîner RotatE (ou TransE, ComplEx, etc.) et prédire des relations manquantes.")
+    st.warning("🔧 À implémenter : chargement des triplets, PyKEEN, prédiction interactive.")
 
-    plt.figure(figsize=(15, 12))
-    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=200, alpha=0.8)
-    nx.draw_networkx_edges(G, pos, arrowstyle='-|>', arrowsize=10, alpha=0.5)
-    nx.draw_networkx_labels(G, pos, font_size=8, font_color='white')
+elif menu_choice == "📈 R-GCN & Relation Prediction":
+    st.header("📈 Prédictions par GNN – R-GCN")
+    st.info("Exploration par Graph Neural Network (R-GCN) pour la complétion et la classification des relations.")
+    st.warning("🔧 À implémenter : R-GCN via PyTorch Geometric et visualisation des résultats.")
 
-    patches = [mpatches.Patch(color=c, label=l) for l, c in color_map_mpl.items()]
-    patches.append(mpatches.Patch(color='gray', label='Other'))
-    plt.legend(handles=patches, loc='best', fontsize=12, title="Types de nœuds")
-    plt.title("Visualisation graphe Cybersecurity Knowledge Graph")
-    plt.axis('off')
-    st.pyplot(plt)
+elif menu_choice == "🧪 Simulation & Digital Twin":
+    st.header("🧪 Simulation avec le Jumeau Numérique")
+    st.info("Ce module permet de simuler des scénarios cyber via le graphe fusionné.")
+    st.warning("🔧 À implémenter : visualisation des impacts, scénarios what-if, propagation.")
 
-# ======================== 6. INTERFACE STREAMLIT ========================
-kg_choice = st.selectbox("Choisir un graphe à afficher :", ["KG1 - NVD", "KG3 - Fusionné"])
-G = build_graph(kg_choice)
+# ======================== 🧠 INFOS DE FIN ========================
+st.sidebar.markdown("---")
+st.sidebar.info("🎓 Projet de M2 – Cyber Digital Twin\nUniversité Lyon 2 – ERIC\nEncadré par l’équipe de recherche KG & Cybersécurité")
 
-st.subheader("🌐 Graphe interactif PyVis")
-show_pyvis(G)
-
-st.subheader("📊 Graphe statique Matplotlib")
-show_static_plot(G)
 
 
