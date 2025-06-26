@@ -71,24 +71,24 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     from pyvis.network import Network
 
     st.subheader("🌐 Visualisation interactive (`pyvis`)")
-        G = nx.DiGraph()
-        skipped_rows = 0
-        for _, row in df.iterrows():
-            src = row.get("source")
-            tgt = row.get("target")
-            tgt_type = row.get("target_type")
 
-            if not src or not tgt or pd.isna(src) or pd.isna(tgt):
-                skipped_rows += 1
-                continue
+    G = nx.DiGraph()
+    skipped_rows = 0
+    for _, row in df.iterrows():
+        src = row.get("source")
+        tgt = row.get("target")
+        tgt_type = row.get("target_type")
 
-            if tgt_type not in selected_entities:
-                continue
+        if not src or not tgt or pd.isna(src) or pd.isna(tgt):
+            skipped_rows += 1
+            continue
 
-            G.add_node(src, type="CVE", label=src)
-            G.add_node(tgt, type=tgt_type, label=tgt)
-            G.add_edge(src, tgt, label=row["relation"])
+        if tgt_type not in selected_entities:
+            continue
 
+        G.add_node(src, type="CVE", label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=row["relation"])
 
     color_map = {
         "CVE": "#ff4d4d", "CWE": "#ffa500", "CPE": "#6699cc", "Entity": "#dddd00"
@@ -111,6 +111,7 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
     st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
     st.markdown(f"- **Densité** : {nx.density(G):.4f}")
+    st.markdown(f"- **Lignes ignorées** : {skipped_rows}")
 
     # Table
     st.markdown("### 📄 Relations extraites")
