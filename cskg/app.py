@@ -40,8 +40,8 @@ menu_choice = st.sidebar.radio(
         "🔮 Embeddings & RotatE Prediction",
         "📈 R-GCN & Relation Prediction",
         "🧪 Simulation & Digital Twin",
-        "📊 Simulation Heatmap",
-        "🧪 Simulation & DTwin2"
+        #"📊 Simulation Heatmap",
+        #"🧪 Simulation & DTwin2"
     ]
 )
 
