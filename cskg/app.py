@@ -69,6 +69,7 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
 
     import networkx as nx
     from pyvis.network import Network
+    import pandas as pd  # <-- assure-toi que `pd` est bien importé en haut si tu le réutilises ici
 
     st.subheader("🌐 Visualisation interactive (`pyvis`)")
 
