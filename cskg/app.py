@@ -787,6 +787,14 @@ elif menu_choice == "🧪 Simulation & DTwin2":
     """
     nb = graph_db.run(query_align).evaluate()
     st.success(f"✅ {nb} CVE_UNIFIED alignés via SAME_AS entre KG1 (NVD) et KG2 (Nessus)")
+
+
+
+
+
+
+
+
 elif menu_choice == "🧪 Simulation & DTwin222222":
     import pandas as pd
     import networkx as nx
@@ -802,21 +810,23 @@ elif menu_choice == "🧪 Simulation & DTwin222222":
     @st.cache_data
     def load_simulation_graph():
         query = """
-        MATCH (h:Host)-[r:IMPACTS]->(s:Service)
-        RETURN h.name AS host, s.name AS service, r.weight AS weight
+        MATCH (h:Host)-[:RUNS_SERVICE]->(s:Service)
+        RETURN h.name AS host, s.name AS service, 1.0 AS weight
         """
         return graph_db.run(query).to_data_frame()
 
     @st.cache_data
     def load_enriched_simulation_graph():
         query = """
-        MATCH (h:Host)-[:DETECTED]->(:Plugin)-[:HAS_CVE]->(c:CVE_UNIFIED)-[r:IMPACTS]->(s:Service)
-        RETURN h.name AS host, c.name AS cve, s.name AS service, r.weight AS weight
+        MATCH (h:Host)-[:HAS_PLUGIN]->(p:Plugin)-[:DETECTS]->(c:CVE)-[:SAME_AS]->(u:CVE_UNIFIED)
+        MATCH (h)-[:RUNS_SERVICE]->(s:Service)
+        MATCH (u)-[r:IMPACTS]->(s)
+        RETURN h.name AS host, u.name AS cve, s.name AS service, r.weight AS weight
         """
         return graph_db.run(query).to_data_frame()
 
     # === 2. Choix de la vue ===
-    view_option = st.radio("🌐 Choisir la vue à afficher :", ["Host → Service", "Host → CVE → Service"])
+    view_option = st.radio("🌐 Choisir la vue à afficher :", ["Host → Service", "Host → CVE_UNIFIED → Service"])
 
     if view_option == "Host → Service":
         df = load_simulation_graph()
@@ -861,9 +871,9 @@ elif menu_choice == "🧪 Simulation & DTwin222222":
                 label = "1.00"
 
             G.add_node(host, type="Host", label=host, color="#00cc66")
-            G.add_node(cve, type="CVE", label=cve, color="#ff5555")
+            G.add_node(cve, type="CVE_UNIFIED", label=cve, color="#ff5555")
             G.add_node(service, type="Service", label=service, color="#ffaa00")
-            G.add_edge(host, cve, weight=1.0, label="→ CVE")
+            G.add_edge(host, cve, weight=1.0, label="→ CVE_UNIFIED")
             G.add_edge(cve, service, weight=weight, label=label)
 
     # === 4. Affichage PyVis ===
@@ -935,6 +945,7 @@ elif menu_choice == "🧪 Simulation & DTwin222222":
             plt.title(f"Score de propagation depuis {selected_host}")
             st.pyplot(plt.gcf())
             plt.clf()
+
 
 # ======================== 🧠 INFOS DE FIN ========================
 st.sidebar.markdown("---")
