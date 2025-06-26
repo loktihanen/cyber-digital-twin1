@@ -271,7 +271,6 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
     st.markdown("---")
 
-    # --- Fonction pour construire le graphe fusionné
     def build_cskg3_graph():
         nodes = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN u.name AS name, u.severity AS severity").data()
         rels = graph_db.run("""
@@ -281,22 +280,30 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
 
         G = nx.Graph()
         for n in nodes:
-            G.add_node(n["name"], severity=n.get("severity", "unknown"))
+            # Assurer que severity est bien une chaîne ou None
+            sev = n.get("severity")
+            if sev is None:
+                sev = "unknown"
+            G.add_node(n["name"], severity=sev)
         for r in rels:
             if r["from"] != r["to"]:
                 G.add_edge(r["from"], r["to"])
         return G
 
-    # --- Fonction pour dessiner le graphe avec pyvis et colorer selon sévérité
     def draw_pyvis_graph(G):
         net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
         net.from_nx(G)
         for node in net.nodes:
             node_id = node.get("id") or node.get("label")
+            sev = ""
             if node_id and node_id in G.nodes:
-                sev = G.nodes[node_id].get("severity", "").lower()
-            else:
-                sev = ""
+                attr = G.nodes[node_id]
+                # Vérifier que attr est dict et que severity est une string
+                if isinstance(attr, dict):
+                    sev_raw = attr.get("severity", "")
+                    if isinstance(sev_raw, str):
+                        sev = sev_raw.lower()
+            # Couleur selon la sévérité
             if sev == "critical":
                 node["color"] = "red"
             elif sev == "high":
@@ -310,7 +317,6 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         net.save_graph(tmpfile.name)
         return tmpfile.name
 
-    # --- Exécution et affichage du graphe (hors des fonctions)
     with st.spinner("Chargement et génération du graphe fusionné..."):
         G = build_cskg3_graph()
         if len(G.nodes) == 0:
