@@ -55,9 +55,15 @@ def build_graph(kg: str, limit=300):
         rel = row["relation"]
         src_type = row.get("source_type", "Other")
         tgt_type = row.get("target_type", "Other")
+
+    #  Skip si src ou tgt est None
+        if not src or not tgt:
+            continue
+
         G.add_node(src, type=src_type, label=src)
         G.add_node(tgt, type=tgt_type, label=tgt)
         G.add_edge(src, tgt, label=rel)
+
     return G
 
 # ======================== 4. VISUALISATION PYVIS ========================
