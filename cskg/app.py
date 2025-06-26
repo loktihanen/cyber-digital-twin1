@@ -212,8 +212,51 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
 
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
-    st.info("Fusion des graphes KG1 & KG2 avec alignement sémantique, enrichissement, et raisonnement.")
-    st.warning("🔧 À implémenter : graphe unifié avec liens SAME_AS, propagation, etc.")
+    st.info("Fusion des graphes KG1 (NVD) et KG2 (Nessus) via alignement sémantique multi-niveaux et création de CVE_UNIFIED.")
+
+    st.subheader("📎 Statistiques de fusion et alignement")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        total_same_as = graph_db.run("MATCH ()-[r:SAME_AS]->() RETURN count(r) AS total").evaluate()
+        st.metric("🔗 SAME_AS relations", total_same_as)
+
+    with col2:
+        total_unified = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN count(u) AS total").evaluate()
+        st.metric("🧬 CVE_UNIFIED", total_unified)
+
+    with col3:
+        count_owl = graph_db.run("""
+            MATCH (c:CVE)-[:SAME_AS]-(n:CVE)
+            WHERE c.source = 'NVD' AND n.source = 'NESSUS'
+            RETURN count(DISTINCT c) AS count
+        """).evaluate()
+        st.metric("🪢 CVE alignées NVD+Nessus", count_owl)
+
+    st.markdown("### 📄 Extrait de correspondances SAME_AS")
+    same_as_df = graph_db.run("""
+        MATCH (c1:CVE)-[r:SAME_AS]-(c2:CVE)
+        WHERE exists(r.method)
+        RETURN c1.name AS CVE_KG1, c2.name AS CVE_KG2, r.method AS Méthode, r.score AS Score
+        ORDER BY r.score DESC
+        LIMIT 100
+    """).to_data_frame()
+    st.dataframe(same_as_df, use_container_width=True)
+
+    st.subheader("📤 Téléchargement du fichier RDF fusionné")
+    rdf_path = "kg_fusionne.ttl"
+    if os.path.exists(rdf_path):
+        with open(rdf_path, "r", encoding="utf-8") as rdf_file:
+            rdf_content = rdf_file.read()
+        st.download_button(
+            label="📥 Télécharger RDF (Turtle)",
+            data=rdf_content,
+            file_name="kg_fusionne.ttl",
+            mime="text/turtle"
+        )
+    else:
+        st.warning("⚠️ Le fichier `kg_fusionne.ttl` n'a pas encore été généré. Lance la pipeline de fusion côté backend.")
+
 
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
