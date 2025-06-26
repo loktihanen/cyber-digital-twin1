@@ -47,21 +47,19 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     st.info("Ce module affiche les vulnérabilités extraites depuis la National Vulnerability Database (CVE, CWE, CPE).")
 
     st.sidebar.subheader("🎛️ Filtres spécifiques à KG1")
-    max_links = st.sidebar.slider("Nombre max de relations", 50, 1000000, 20000)
     min_cvss = st.sidebar.slider("Score CVSS minimum", 0.0, 10.0, 0.0)
     selected_entities = st.sidebar.multiselect("Entités à afficher", ["CVE", "CWE", "CPE", "Entity"], default=["CVE", "CWE", "CPE"])
 
     @st.cache_data
-    def load_kg1_data(limit, min_cvss):
+    def load_kg1_data(min_cvss):
         query = f"""
         MATCH (c:CVE)-[r]->(x)
         WHERE c.cvss_score >= {min_cvss}
         RETURN c.name AS source, type(r) AS relation, x.name AS target, labels(x)[0] AS target_type
-        LIMIT {limit}
         """
         return graph_db.run(query).to_data_frame()
 
-    df = load_kg1_data(max_links, min_cvss)
+    df = load_kg1_data(min_cvss)
 
     if df.empty:
         st.warning("Aucune relation NVD trouvée pour les filtres donnés.")
@@ -69,7 +67,7 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
 
     import networkx as nx
     from pyvis.network import Network
-    import pandas as pd  # <-- assure-toi que `pd` est bien importé en haut si tu le réutilises ici
+    import pandas as pd
 
     st.subheader("🌐 Visualisation interactive (`pyvis`)")
 
