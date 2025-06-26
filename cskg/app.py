@@ -119,8 +119,84 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
 
 elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     st.header("🧩 CSKG2 – Graphe basé sur les scans Nessus")
-    st.info("Ce module permet d'explorer les vulnérabilités détectées sur ton infrastructure via Nessus.")
-    st.warning("🔧 À implémenter : affichage des hôtes, plugins, CVE liés.")
+    st.info("Ce module permet d'explorer les vulnérabilités détectées dans ton infrastructure via les résultats Nessus (hosts, plugins, CVE).")
+
+    st.sidebar.subheader("🎛️ Filtres spécifiques à KG2")
+    selected_entities = st.sidebar.multiselect(
+        "Types d'entités à afficher",
+        ["Host", "Plugin", "CVE", "Service", "Port"],
+        default=["Host", "Plugin", "CVE"]
+    )
+
+    @st.cache_data
+    def load_kg2_data():
+        query = """
+        MATCH (a)-[r]->(b)
+        WHERE labels(a)[0] IN ['Host', 'Plugin'] AND labels(b)[0] IN ['Plugin', 'CVE', 'Port', 'Service']
+        RETURN a.name AS source, type(r) AS relation, b.name AS target,
+               labels(a)[0] AS source_type, labels(b)[0] AS target_type
+        """
+        return graph_db.run(query).to_data_frame()
+
+    df = load_kg2_data()
+
+    if df.empty:
+        st.warning("Aucune relation Nessus trouvée.")
+        st.stop()
+
+    import networkx as nx
+    from pyvis.network import Network
+    import pandas as pd
+
+    st.subheader("🌐 Visualisation interactive (`pyvis`)")
+
+    G = nx.DiGraph()
+    skipped = 0
+    for _, row in df.iterrows():
+        src = row.get("source")
+        tgt = row.get("target")
+        src_type = row.get("source_type")
+        tgt_type = row.get("target_type")
+
+        if not src or not tgt or pd.isna(src) or pd.isna(tgt):
+            skipped += 1
+            continue
+
+        if src_type not in selected_entities and tgt_type not in selected_entities:
+            continue
+
+        G.add_node(src, type=src_type, label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=row["relation"])
+
+    color_map = {
+        "Host": "#00cc66", "Plugin": "#66ccff", "CVE": "#ff4d4d",
+        "Service": "#ffaa00", "Port": "#9966cc"
+    }
+
+    net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white")
+    for node, data in G.nodes(data=True):
+        net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
+    for src, tgt, data in G.edges(data=True):
+        net.add_edge(src, tgt, title=data.get("label", ""))
+
+    path = "/tmp/kg2_nessus.html"
+    net.save_graph(path)
+    with open(path, 'r', encoding='utf-8') as f:
+        html = f.read()
+    st.components.v1.html(html, height=700, scrolling=True)
+
+    # Statistiques
+    st.markdown("### 📊 Statistiques du graphe")
+    st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
+    st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
+    st.markdown(f"- **Densité** : {nx.density(G):.4f}")
+    st.markdown(f"- **Lignes ignorées** : {skipped}")
+
+    # Tableau
+    st.markdown("### 📄 Relations extraites")
+    st.dataframe(df, use_container_width=True)
+
 
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
