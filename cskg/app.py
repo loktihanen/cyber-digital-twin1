@@ -207,130 +207,118 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     # 📄 Table des relations
     st.markdown("### 📄 Relations extraites")
     st.dataframe(df, use_container_width=True)
-
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     import networkx as nx
     from pyvis.network import Network
     import tempfile
-    import os
-    import pandas as pd
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
 
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
-    st.info("Visualisation interactive du graphe fusionné (vulnérabilités, plugins, hôtes, OS, ports, applications, etc.)")
+    st.info("Visualisation en temps réel du graphe fusionné (NVD + Nessus) : CVE_UNIFIED, Plugin, Host, Service, etc.")
 
-    # --- Statistiques générales
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        total_nodes = graph_db.run("MATCH (n) RETURN count(n)").evaluate()
-        st.metric("🧠 Nœuds total", total_nodes)
-    with col2:
-        total_edges = graph_db.run("MATCH ()-[r]->() RETURN count(r)").evaluate()
-        st.metric("🔗 Relations total", total_edges)
-    with col3:
-        total_cve_unified = graph_db.run("MATCH (n:CVE_UNIFIED) RETURN count(n)").evaluate()
-        st.metric("🧬 CVE_UNIFIED", total_cve_unified)
+    # === Requête complète vers Neo4j pour nœuds et relations ===
+    query = """
+    MATCH (a)-[r]->(b)
+    WHERE a:CVE OR a:CVE_UNIFIED OR a:Plugin OR a:Host OR a:Service
+    RETURN a.name AS source, type(r) AS relation, b.name AS target,
+           labels(a)[0] AS source_type, labels(b)[0] AS target_type
+    LIMIT 300
+    """
+    data = graph_db.run(query).data()
 
-    st.markdown("---")
+    # === Construction du graphe NetworkX ===
+    G = nx.DiGraph()
+    color_map = {
+        "CVE": "#ff4d4d",
+        "CVE_UNIFIED": "#ffcc00",
+        "Plugin": "#66ccff",
+        "Host": "#00cc66",
+        "Service": "#ffa500"
+    }
 
-    # === Construction du graphe enrichi limité à 500 nœuds ===
-    def build_cskg3_graph():
-        query_nodes = """
-        MATCH (n)
-        WHERE n:CVE_UNIFIED OR n:CVE OR n:Plugin OR n:Host OR n:OS OR n:Port OR n:Service OR n:Software OR n:CPE OR n:CWE OR n:IP OR n:Application
-        RETURN id(n) AS id, n.name AS name, labels(n)[0] AS label, n.severity AS severity
-        LIMIT 500
-        """
-        nodes = graph_db.run(query_nodes).data()
-        node_ids = [n["id"] for n in nodes]
+    skipped = 0
+    for row in data:
+        src = row.get("source")
+        tgt = row.get("target")
+        rel = row.get("relation")
+        src_type = row.get("source_type")
+        tgt_type = row.get("target_type")
 
-        query_edges = """
-        MATCH (a)-[r]->(b)
-        WHERE id(a) IN $ids AND id(b) IN $ids
-        RETURN id(a) AS source, id(b) AS target, type(r) AS relation
-        """
-        edges = graph_db.run(query_edges, parameters={"ids": node_ids}).data()
+        if not src or not tgt:
+            skipped += 1
+            continue
 
-        G = nx.DiGraph()
-        for n in nodes:
-            severity = n.get("severity", "unknown") or "unknown"
-            G.add_node(n["id"], label=n["name"], type=n["label"], severity=severity)
-        for e in edges:
-            G.add_edge(e["source"], e["target"], label=e["relation"])
-        return G
+        G.add_node(src, type=src_type, label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=rel)
 
+    # === Visualisation PyVis ===
     def draw_pyvis_graph(G):
-        net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", notebook=False)
-        color_map = {
-            "CVE_UNIFIED": "#ff4d4d", "CVE": "#ff9999", "CPE": "#6699cc", "CWE": "#ffa500",
-            "Plugin": "#66ccff", "Host": "#00cc66", "Service": "#ffaa00", "OS": "#cc00cc",
-            "Port": "#9966cc", "Software": "#cc9966", "IP": "#00cccc", "Application": "#aaff00"
-        }
-
-        for node_id, data in G.nodes(data=True):
+        net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
+        for node, data in G.nodes(data=True):
             node_type = data.get("type", "Unknown")
-            node_label = data.get("label", str(node_id))
-            severity = data.get("severity", "unknown").lower()
-
             color = color_map.get(node_type, "lightgray")
-            if node_type == "CVE_UNIFIED":
-                if severity == "critical":
-                    color = "red"
-                elif severity == "high":
-                    color = "orange"
-                elif severity == "medium":
-                    color = "yellow"
-                else:
-                    color = "lightblue"
-
-            net.add_node(node_id, label=node_label, color=color,
-                         title=f"{node_type} | Sévérité: {severity}")
-
+            net.add_node(node, label=data.get("label", node), color=color, title=node_type)
         for src, tgt, data in G.edges(data=True):
             net.add_edge(src, tgt, title=data.get("label", ""))
-
         tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
         net.save_graph(tmpfile.name)
         return tmpfile.name
 
-    # --- Affichage PyVis
-    with st.spinner("Chargement et génération du graphe fusionné..."):
-        try:
-            G = build_cskg3_graph()
-            if len(G.nodes) == 0:
-                st.warning("⚠️ Le graphe est vide.")
-            else:
-                html_path = draw_pyvis_graph(G)
-                with open(html_path, 'r', encoding='utf-8') as f:
-                    html = f.read()
-                st.components.v1.html(html, height=700, scrolling=True)
-                os.unlink(html_path)
+    # === PyVis dans Streamlit
+    st.subheader("🌐 Visualisation interactive (PyVis)")
+    with st.spinner("🔄 Génération du graphe..."):
+        html_path = draw_pyvis_graph(G)
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        st.components.v1.html(html, height=700, scrolling=True)
 
-                # --- Statistiques locales du graphe affiché
-                st.markdown("---")
-                st.markdown("### 📊 Statistiques du graphe enrichi affiché")
-                st.markdown(f"- **Nœuds affichés** : {G.number_of_nodes()}")
-                st.markdown(f"- **Relations affichées** : {G.number_of_edges()}")
-                st.markdown(f"- **Densité** : {nx.density(G):.6f}")
+    # === Visualisation statique matplotlib
+    st.subheader("📊 Visualisation statique (matplotlib)")
+    node_colors = [color_map.get(G.nodes[n].get("type", "Other"), "#cccccc") for n in G.nodes()]
+    pos = nx.spring_layout(G, k=0.3, seed=42)
 
-        except Exception as e:
-            st.error("❌ Erreur lors de la génération du graphe.")
-            st.exception(e)
+    plt.figure(figsize=(18, 12))
+    nx.draw_networkx_nodes(G, pos, node_size=600, node_color=node_colors)
+    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=True)
+    nx.draw_networkx_labels(G, pos, font_size=9)
 
-    # --- Export RDF fusionné
+    edge_labels = nx.get_edge_attributes(G, 'label')
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="orange", font_size=7)
+
+    legend_patches = [mpatches.Patch(color=c, label=l) for l, c in color_map.items()]
+    plt.legend(handles=legend_patches, loc="best", title="Types de nœuds")
+    plt.title("🔎 Visualisation du graphe de vulnérabilités (NVD + Nessus)", fontsize=16)
+    plt.axis("off")
+    st.pyplot(plt)
+
+    # === Statistiques du graphe ===
+    st.markdown("### 📈 Statistiques du graphe")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("🧠 Nœuds", G.number_of_nodes())
+    with col2:
+        st.metric("🔗 Relations", G.number_of_edges())
+    with col3:
+        st.metric("📊 Densité", f"{nx.density(G):.4f}")
+    st.caption(f"⚠️ Lignes ignorées (valeurs nulles) : {skipped}")
+
+    # === Téléchargement RDF si présent ===
     st.markdown("---")
-    st.subheader("📤 Téléchargement du fichier RDF fusionné")
+    st.subheader("📤 RDF exporté (Turtle)")
     rdf_file = "kg_fusionne.ttl"
     if os.path.exists(rdf_file):
         with open(rdf_file, "r", encoding="utf-8") as f:
             rdf_content = f.read()
         st.download_button(
-            label="📥 Télécharger RDF (Turtle)",
+            label="📥 Télécharger RDF (kg_fusionne.ttl)",
             data=rdf_content,
-            file_name=rdf_file,
+            file_name="kg_fusionne.ttl",
             mime="text/turtle"
         )
     else:
-        st.warning("⚠️ Le fichier `kg_fusionne.ttl` n'existe pas encore. Exécute le script de fusion backend.")
+        st.warning("⚠️ Le fichier `kg_fusionne.ttl` est introuvable. Exécute `propagate_impacts.py` ou `rdf_export.py`.")
 
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
