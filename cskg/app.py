@@ -473,9 +473,167 @@ elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.success("✅ Module RotatE exécuté avec succès.")
 
 elif menu_choice == "📈 R-GCN & Relation Prediction":
+    import streamlit as st
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import numpy as np
+    import matplotlib.pyplot as plt
+
     st.header("📈 Prédictions par GNN – R-GCN")
     st.info("Exploration par Graph Neural Network (R-GCN) pour la complétion et la classification des relations.")
-    st.warning("🔧 À implémenter : R-GCN via PyTorch Geometric et visualisation des résultats.")
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # ======= Définition modèle R-GCN =========
+    class RGCNLayer(nn.Module):
+        def __init__(self, in_dim, out_dim, num_rels):
+            super(RGCNLayer, self).__init__()
+            self.weight = nn.Parameter(torch.Tensor(num_rels, in_dim, out_dim))
+            self.self_loop_weight = nn.Parameter(torch.Tensor(in_dim, out_dim))
+            self.bias = nn.Parameter(torch.Tensor(out_dim))
+            nn.init.xavier_uniform_(self.weight)
+            nn.init.xavier_uniform_(self.self_loop_weight)
+            nn.init.zeros_(self.bias)
+
+        def forward(self, entity_emb, edge_index, edge_type, num_entities):
+            out = torch.zeros_like(entity_emb)
+            for i in range(edge_index.size(1)):
+                src = edge_index[0, i]
+                dst = edge_index[1, i]
+                rel = edge_type[i]
+                out[dst] += torch.matmul(entity_emb[src], self.weight[rel])
+            out += torch.matmul(entity_emb, self.self_loop_weight)
+            out += self.bias
+            return torch.relu(out)
+
+    class RGCN(nn.Module):
+        def __init__(self, num_entities, num_relations, emb_dim=100, num_layers=2):
+            super(RGCN, self).__init__()
+            self.emb_dim = emb_dim
+            self.num_entities = num_entities
+            self.entity_emb = nn.Embedding(num_entities, emb_dim)
+            self.layers = nn.ModuleList([
+                RGCNLayer(emb_dim, emb_dim, num_relations) for _ in range(num_layers)
+            ])
+            self.score_fn = lambda h, t: -torch.norm(h - t, p=1, dim=1)
+
+        def forward(self, edge_index, edge_type):
+            x = self.entity_emb.weight
+            for layer in self.layers:
+                x = layer(x, edge_index, edge_type, self.num_entities)
+            return x
+
+        def score(self, entity_emb, head_idx, tail_idx):
+            h = entity_emb[head_idx]
+            t = entity_emb[tail_idx]
+            return self.score_fn(h, t)
+
+    # ======= Préparation données =======
+    # Supposons que train_triples et test_triples soient déjà définis comme numpy arrays (shape Nx3):
+    # train_triples = np.array([[head_id, rel_id, tail_id], ...])
+    # test_triples = np.array([[head_id, rel_id, tail_id], ...])
+    # entity2id et relation2id : dictionnaires nom->id
+
+    if 'train_triples' not in st.session_state or 'test_triples' not in st.session_state \
+       or 'entity2id' not in st.session_state or 'relation2id' not in st.session_state:
+        st.error("❌ Les données train_triples, test_triples, entity2id, relation2id doivent être chargées au préalable.")
+    else:
+        train_triples = st.session_state.train_triples
+        test_triples = st.session_state.test_triples
+        entity2id = st.session_state.entity2id
+        relation2id = st.session_state.relation2id
+        hosts = [e for e in entity2id if e.startswith("Host")]
+        impact_rel_id = relation2id.get("IMPACTS", 0)
+
+        edge_index = torch.tensor([[h, t] for h, r, t in train_triples], dtype=torch.long).t()
+        edge_type = torch.tensor([r for h, r, t in train_triples], dtype=torch.long)
+
+        model = RGCN(len(entity2id), len(relation2id), emb_dim=128).to(device)
+        optimizer = optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.MarginRankingLoss(margin=1.0)
+
+        st.write("⚙️ Entraînement du modèle R-GCN...")
+
+        EPOCHS = st.number_input("Nombre d'époques", min_value=1, max_value=50, value=5, step=1)
+
+        losses = []
+        for epoch in range(EPOCHS):
+            model.train()
+            optimizer.zero_grad()
+
+            entity_emb = model(edge_index.to(device), edge_type.to(device))
+
+            idx = np.random.choice(len(train_triples), 1024)
+            batch = train_triples[idx]
+            heads = torch.tensor(batch[:, 0]).to(device)
+            tails = torch.tensor(batch[:, 2]).to(device)
+
+            tails_neg = torch.randint(0, len(entity2id), (len(batch),)).to(device)
+
+            pos_scores = model.score(entity_emb, heads, tails)
+            neg_scores = model.score(entity_emb, heads, tails_neg)
+            y = torch.ones_like(pos_scores)
+
+            loss = loss_fn(pos_scores, neg_scores, y)
+            loss.backward()
+            optimizer.step()
+
+            losses.append(loss.item())
+            st.write(f"📚 Epoch {epoch+1}/{EPOCHS} - Loss: {loss.item():.4f}")
+
+        # Affichage graphique de la perte
+        fig, ax = plt.subplots()
+        ax.plot(range(1, EPOCHS+1), losses, marker='o')
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Loss")
+        ax.set_title("Courbe de perte durant l'entraînement R-GCN")
+        st.pyplot(fig)
+
+        # ====== Évaluation =======
+        model.eval()
+        entity_emb = model(edge_index.to(device), edge_type.to(device))
+
+        def evaluate_rgcn(entity_emb, test_triples, k=10):
+            ranks = []
+            hits = 0
+            for h, r, t in test_triples:
+                scores = model.score(
+                    entity_emb,
+                    torch.tensor([h]*len(entity_emb)).to(device),
+                    torch.arange(len(entity_emb)).to(device)
+                )
+                _, indices = torch.sort(scores, descending=True)
+                rank = (indices == t).nonzero(as_tuple=False).item() + 1
+                ranks.append(rank)
+                if rank <= k:
+                    hits += 1
+
+            mrr = np.mean([1.0 / r for r in ranks])
+            return mrr, hits / len(test_triples)
+
+        mrr, hits_at_10 = evaluate_rgcn(entity_emb, test_triples)
+        st.success(f"✅ Évaluation R-GCN : MRR = {mrr:.4f}, Hits@10 = {hits_at_10:.4f}")
+
+        # ===== Scoring des hôtes =====
+        def compute_host_vuln_scores_rgcn(hosts, impact_rel_id, entity2id, entity_emb):
+            scores = {}
+            for host in hosts:
+                host_id = entity2id[host]
+                cve_entities = [e for e in entity2id if "CVE" in e]
+                cve_ids = [entity2id[cve] for cve in cve_entities]
+
+                host_tensor = torch.tensor([host_id] * len(cve_ids)).to(device)
+                cve_tensor = torch.tensor(cve_ids).to(device)
+                with torch.no_grad():
+                    score = model.score(entity_emb, cve_tensor, host_tensor)
+                    scores[host] = score.cpu().numpy().sum()
+            return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
+
+        host_scores_rgcn = compute_host_vuln_scores_rgcn(hosts, impact_rel_id, entity2id, entity_emb)
+        st.write("🏆 Top hôtes vulnérables (R-GCN) :")
+        for h, s in list(host_scores_rgcn.items())[:10]:
+            st.write(f"- {h}: {s:.2f}")
 
 elif menu_choice == "🧪 Simulation & Digital Twin":
     st.header("🧪 Simulation avec le Jumeau Numérique")
