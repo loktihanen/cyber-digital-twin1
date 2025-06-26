@@ -42,7 +42,7 @@ menu_choice = st.sidebar.radio(
 # ======================== 🎯 ROUTAGE DES MODULES ========================
 st.markdown("---")
 
-elif menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
+if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     st.header("📌 CSKG1 – Graphe basé sur la NVD")
     st.info("Ce module affiche les vulnérabilités extraites depuis la National Vulnerability Database (CVE, CWE, CPE).")
 
