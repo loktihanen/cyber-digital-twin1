@@ -482,41 +482,6 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
 
     st.header("📈 Prédictions par GNN – R-GCN")
     st.info("Exploration par Graph Neural Network (R-GCN) pour la complétion et la classification des relations.")
-    
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # ======= Définition modèle R-GCN =========
-    class RGCNLayer(nn.Module):
-        def __init__(self, in_dim, out_dim, num_rels):
-            super(RGCNLayer, self).__init__()
-            self.weight = nn.Parameter(torch.Tensor(num_rels, in_dim, out_dim))
-            self.self_loop_weight = nn.Parameter(torch.Tensor(in_dim, out_dim))
-            self.bias = nn.Parameter(torch.Tensor(out_dim))
-            nn.init.xavier_uniform_(self.weight)
-            nn.init.xavier_uniform_(self.self_loop_weight)
-            nn.init.zeros_(self.bias)
-
-        def forward(self, entity_emb, edge_index, edge_type, num_entities):
-            out = torch.zeros_like(entity_emb)
-            for i in range(edge_index.size(1)):
-                src = edge_index[0, i]
-                dst = edge_index[1, i]
-                rel = edge_type[i]
-                out[dst] += torch.matmul(entity_emb[src], self.weight[rel])
-            out += torch.matmul(entity_emb, self.self_loop_weight)
-            out += self.bias
-            return torch.relu(out)
-
-elif menu_choice == "📈 R-GCN & Relation Prediction":
-    import streamlit as st
-    import torch
-    import torch.nn as nn
-    import torch.optim as optim
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    st.header("📈 Prédictions par GNN – R-GCN")
-    st.info("Exploration par Graph Neural Network (R-GCN) pour la complétion et la classification des relations.")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -569,7 +534,6 @@ elif menu_choice == "📈 R-GCN & Relation Prediction":
     if not all(k in st.session_state for k in required_keys):
         st.error(f"❌ Les données {', '.join(required_keys)} doivent être chargées au préalable dans st.session_state.")
     else:
-        # Conversion en np.array si besoin
         train_triples = np.array(st.session_state.train_triples)
         test_triples = np.array(st.session_state.test_triples)
         entity2id = st.session_state.entity2id
