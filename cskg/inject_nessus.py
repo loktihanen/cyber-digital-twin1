@@ -3,7 +3,7 @@ from py2neo import Graph, Node, Relationship
 import pandas as pd
 import os
 
-# ======================== 2. CONNEXION NEO4J ========================
+# ======================== 2. CONNEXION NEO4J =======================
 # Connexion Neo4j Aura Free avec paramètres codés en dur
 
 from py2neo import Graph
