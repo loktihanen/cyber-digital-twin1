@@ -210,6 +210,8 @@ elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
 
 
 
+import os  # ✅ requis pour vérifier le fichier RDF
+
 elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
     st.info("Fusion des graphes KG1 (NVD) et KG2 (Nessus) via alignement sémantique multi-niveaux et création de CVE_UNIFIED.")
@@ -221,15 +223,17 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         try:
             total_same_as = graph_db.run("MATCH ()-[r:SAME_AS]->() RETURN count(r) AS total").evaluate()
             st.metric("🔗 SAME_AS relations", total_same_as)
-        except:
+        except Exception as e:
             st.error("❌ Erreur lors du comptage des relations SAME_AS.")
+            st.exception(e)
 
     with col2:
         try:
             total_unified = graph_db.run("MATCH (u:CVE_UNIFIED) RETURN count(u) AS total").evaluate()
             st.metric("🧬 CVE_UNIFIED", total_unified)
-        except:
+        except Exception as e:
             st.error("❌ Erreur lors du comptage des CVE_UNIFIED.")
+            st.exception(e)
 
     with col3:
         try:
@@ -239,8 +243,9 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
                 RETURN count(DISTINCT c) AS count
             """).evaluate()
             st.metric("🪢 CVE alignées NVD+Nessus", count_owl)
-        except:
+        except Exception as e:
             st.error("❌ Erreur lors du comptage des alignements CVE.")
+            st.exception(e)
 
     # =================== 📄 Tableau de correspondances ===================
     st.markdown("### 📄 Extrait de correspondances SAME_AS")
@@ -248,7 +253,7 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     try:
         same_as_df = graph_db.run("""
             MATCH (c1:CVE)-[r:SAME_AS]-(c2:CVE)
-            WHERE exists(r.method) AND exists(r.score)
+            WHERE r.method IS NOT NULL AND r.score IS NOT NULL
             RETURN c1.name AS CVE_KG1, c2.name AS CVE_KG2,
                    r.method AS Méthode, r.score AS Score
             ORDER BY r.score DESC
@@ -275,7 +280,6 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
         )
     else:
         st.warning("⚠️ Le fichier `kg_fusionne.ttl` n'existe pas encore. Exécute le script de fusion backend.")
-
 
 elif menu_choice == "🔮 Embeddings & RotatE Prediction":
     st.header("🔮 Embeddings & Prédiction avec RotatE")
