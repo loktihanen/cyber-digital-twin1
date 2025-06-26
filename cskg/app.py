@@ -5,86 +5,99 @@ import os
 import networkx as nx
 from pyvis.network import Network
 import streamlit.components.v1 as components
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from py2neo import Graph
+import tempfile
 
-# ======================== 1. TITRE ========================
+# ======================== CONFIGURATION ========================
 st.set_page_config(layout="wide")
-st.title("🛡️ Cyber Digital Twin – Visualisation & Simulation")
+st.title("🛡️ Cyber Digital Twin – Visualisation en temps réel")
 
-# ======================== 2. MENU ========================
-menu = st.sidebar.radio("Accès aux graphes et modules", [
-    "📂 CSKG1 (NVD)",
-    "🖧 CSKG2 (Nessus)",
-    "🔗 CSKG3 Fusionné",
-    "📊 Embeddings RotatE",
-    "🧠 R-GCN Prediction",
-    "🚨 Simulation d'Attaque"
-])
+# ======================== CONNEXION NEO4J ========================
+@st.cache_resource
+def connect_neo4j():
+    uri = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    user = os.environ.get("NEO4J_USER", "neo4j")
+    password = os.environ.get("NEO4J_PASSWORD", "password")
+    return Graph(uri, auth=(user, password))
 
-# ======================== 3. CHARGER HTML PYVIS ========================
-def show_graph_html(path):
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            html = f.read()
-            components.html(html, height=800, scrolling=True)
+graph_db = connect_neo4j()
+
+# ======================== REQUÊTE & CONSTRUCTION DU GRAPHE ========================
+def build_graph(kg: str, limit=300):
+    if kg == "KG1 - NVD":
+        query = f"""
+        MATCH (a:CVE)-[r]->(b)
+        RETURN a.name AS source, type(r) AS relation, b.name AS target,
+               labels(a)[0] AS source_type, labels(b)[0] AS target_type
+        LIMIT {limit}
+        """
     else:
-        st.warning("Fichier HTML introuvable : " + path)
+        query = f"""
+        MATCH (a:CVE_UNIFIED)-[r]->(b)
+        RETURN a.name AS source, type(r) AS relation, b.name AS target,
+               labels(a)[0] AS source_type, labels(b)[0] AS target_type
+        LIMIT {limit}
+        """
+    data = graph_db.run(query).data()
+    G = nx.DiGraph()
+    for row in data:
+        src = row["source"]
+        tgt = row["target"]
+        rel = row["relation"]
+        src_type = row.get("source_type", "Other")
+        tgt_type = row.get("target_type", "Other")
+        G.add_node(src, type=src_type, label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=rel)
+    return G
 
-# ======================== 4. AFFICHAGE PAR SECTION ========================
-if menu == "📂 CSKG1 (NVD)":
-    st.header("📂 Graphe NVD (CSKG1)")
-    show_graph_html("data/visuals/cskg1_nvd.html")
+# ======================== VISUALISATION PYVIS ========================
+def show_pyvis(G):
+    net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
+    color_map = {
+        "CVE": "#ff4d4d", "CVE_UNIFIED": "#ffcc00", "CWE": "#ffa500", "CPE": "#6699cc",
+        "Host": "#00cc66", "Plugin": "#66ccff", "Port": "#9966cc", "Service": "#ff9900", "Entity": "#dddd00"
+    }
+    for node, data in G.nodes(data=True):
+        net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
+    for src, tgt, data in G.edges(data=True):
+        net.add_edge(src, tgt, label=data.get("label", ""))
 
-elif menu == "🖧 CSKG2 (Nessus)":
-    st.header("🖧 Graphe Nessus (CSKG2)")
-    show_graph_html("data/visuals/cskg2_nessus.html")
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    net.save_graph(tmp_file.name)
+    with open(tmp_file.name, 'r') as f:
+        components.html(f.read(), height=700, scrolling=True)
 
-elif menu == "🔗 CSKG3 Fusionné":
-    st.header("🔗 Graphe Fusionné (CSKG3)")
-    show_graph_html("data/visuals/graph.html")
+# ======================== VISUALISATION MATPLOTLIB ========================
+def show_static_plot(G):
+    color_map_mpl = {
+        "CVE": "red", "CWE": "orange", "CPE": "blue", "Entity": "green"
+    }
+    node_colors = [color_map_mpl.get(G.nodes[n].get("type", "Other"), "gray") for n in G.nodes()]
+    pos = nx.spring_layout(G, k=0.15, iterations=20, seed=42)
 
-elif menu == "📊 Embeddings RotatE":
-    st.header("📊 Visualisation des embeddings RotatE")
-    if os.path.exists("data/embeddings/rotate_tsne.csv"):
-        df = pd.read_csv("data/embeddings/rotate_tsne.csv")
-        st.dataframe(df.head())
-        st.pyplot(
-            lambda: __import__('matplotlib.pyplot').scatter(df['x'], df['y'], c=df['cluster'], cmap="tab10"))
-        st.image("data/embeddings/rotate_tsne.png")
-    else:
-        st.warning("Embeddings non trouvés.")
+    plt.figure(figsize=(15, 12))
+    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=200, alpha=0.8)
+    nx.draw_networkx_edges(G, pos, arrowstyle='-|>', arrowsize=10, alpha=0.5)
+    nx.draw_networkx_labels(G, pos, font_size=8, font_color='white')
 
-elif menu == "🧠 R-GCN Prediction":
-    st.header("🧠 R-GCN : Prédiction de propagation")
-    if os.path.exists("rotate_prediction.png"):
-        st.image("rotate_prediction.png")
-    else:
-        st.warning("Aucune visualisation de prédiction disponible.")
+    patches = [mpatches.Patch(color=c, label=l) for l, c in color_map_mpl.items()]
+    patches.append(mpatches.Patch(color='gray', label='Other'))
+    plt.legend(handles=patches, loc='best', fontsize=12, title="Types de nœuds")
+    plt.title("Visualisation graphe Cybersecurity Knowledge Graph")
+    plt.axis('off')
+    st.pyplot(plt)
 
-elif menu == "🚨 Simulation d'Attaque":
-    st.header("🚨 Simulation – CVE vers hôtes et services")
-    st.markdown("Ce module affiche les entités potentiellement impactées par une CVE.")
-    cve_input = st.text_input("Entrer une CVE (ex: CVE-2021-34527):")
-    if st.button("Simuler") and cve_input:
-        import json
-        from rotate_predict import simulate_propagation
-        from py2neo import Graph
+# ======================== INTERFACE STREAMLIT ========================
+kg_choice = st.selectbox("Choisir un graphe à afficher :", ["KG1 - NVD", "KG3 - Fusionné"])
+G = build_graph(kg_choice)
 
-        @st.cache_resource
-        def connect_neo4j():
-            uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
-            user = "neo4j"
-            password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-            return Graph(uri, auth=(user, password))
-        graph = connect_neo4j()
-        g = Graph(uri, auth=(user, password))
-        results = simulate_propagation(cve_input, nx.DiGraph())
+st.subheader("🌐 Graphe interactif PyVis")
+show_pyvis(G)
 
-        if results:
-            st.write(f"Top 10 entités impactées par {cve_input}")
-            for ent, score in sorted(results.items(), key=lambda x: x[1], reverse=True)[:10]:
-                st.write(f"{ent} → Score: {score:.2f}")
-        else:
-            st.warning("Aucune propagation trouvée pour cette CVE.")
-
+st.subheader("📊 Graphe statique Matplotlib")
+show_static_plot(G)
 
 
