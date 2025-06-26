@@ -42,10 +42,68 @@ menu_choice = st.sidebar.radio(
 # ======================== 🎯 ROUTAGE DES MODULES ========================
 st.markdown("---")
 
-if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
+elif menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     st.header("📌 CSKG1 – Graphe basé sur la NVD")
     st.info("Ce module affiche les vulnérabilités extraites depuis la National Vulnerability Database (CVE, CWE, CPE).")
-    st.warning("🔧 À implémenter : visualisation interactive, filtrage par CVSS, etc.")
+
+    st.sidebar.subheader("🎛️ Filtres spécifiques à KG1")
+    max_links = st.sidebar.slider("Nombre max de relations", 50, 1000, 200)
+    min_cvss = st.sidebar.slider("Score CVSS minimum", 0.0, 10.0, 0.0)
+    selected_entities = st.sidebar.multiselect("Entités à afficher", ["CVE", "CWE", "CPE", "Entity"], default=["CVE", "CWE", "CPE"])
+
+    @st.cache_data
+    def load_kg1_data(limit, min_cvss):
+        query = f"""
+        MATCH (c:CVE)-[r]->(x)
+        WHERE c.cvss_score >= {min_cvss}
+        RETURN c.name AS source, type(r) AS relation, x.name AS target, labels(x)[0] AS target_type
+        LIMIT {limit}
+        """
+        return graph_db.run(query).to_data_frame()
+
+    df = load_kg1_data(max_links, min_cvss)
+
+    if df.empty:
+        st.warning("Aucune relation NVD trouvée pour les filtres donnés.")
+        st.stop()
+
+    import networkx as nx
+    from pyvis.network import Network
+
+    st.subheader("🌐 Visualisation interactive (`pyvis`)")
+    G = nx.DiGraph()
+    for _, row in df.iterrows():
+        if row["target_type"] in selected_entities:
+            G.add_node(row["source"], type="CVE", label=row["source"])
+            G.add_node(row["target"], type=row["target_type"], label=row["target"])
+            G.add_edge(row["source"], row["target"], label=row["relation"])
+
+    color_map = {
+        "CVE": "#ff4d4d", "CWE": "#ffa500", "CPE": "#6699cc", "Entity": "#dddd00"
+    }
+
+    net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
+    for node, data in G.nodes(data=True):
+        net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
+    for src, tgt, data in G.edges(data=True):
+        net.add_edge(src, tgt, title=data.get("label", ""))
+
+    path = "/tmp/kg1_nvd.html"
+    net.save_graph(path)
+    with open(path, 'r', encoding='utf-8') as f:
+        html = f.read()
+    st.components.v1.html(html, height=700, scrolling=True)
+
+    # Statistiques
+    st.markdown("### 📊 Statistiques du graphe")
+    st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
+    st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
+    st.markdown(f"- **Densité** : {nx.density(G):.4f}")
+
+    # Table
+    st.markdown("### 📄 Relations extraites")
+    st.dataframe(df, use_container_width=True)
+
 
 elif menu_choice == "🧩 CSKG2 – Nessus (scans internes)":
     st.header("🧩 CSKG2 – Graphe basé sur les scans Nessus")
