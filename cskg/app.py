@@ -57,7 +57,7 @@ if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
         MATCH (c:CVE)-[r]->(x)
         WHERE c.cvss_score >= {min_cvss}
         RETURN c.name AS source, type(r) AS relation, x.name AS target, labels(x)[0] AS target_type
-        #LIMIT {limit}
+        LIMIT {limit}
         """
         return graph_db.run(query).to_data_frame()
 
