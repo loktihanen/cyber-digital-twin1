@@ -15,7 +15,7 @@ pandas
 numpy
 
 streamlit
-
+seaborn
 
 
 
