@@ -296,7 +296,6 @@ def draw_pyvis_graph(G):
             sev = G.nodes[node_id].get("severity", "").lower()
         else:
             sev = ""
-        # Couleur selon la sévérité
         if sev == "critical":
             node["color"] = "red"
         elif sev == "high":
@@ -309,16 +308,19 @@ def draw_pyvis_graph(G):
     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
     net.save_graph(tmpfile.name)
     return tmpfile.name
-    with st.spinner("Chargement et génération du graphe fusionné..."):
-        G = build_cskg3_graph()
-        if len(G.nodes) == 0:
-            st.warning("Le graphe fusionné est vide ou n'a pas encore été généré.")
-        else:
-            html_path = draw_pyvis_graph(G)
-            with open(html_path, 'r', encoding='utf-8') as f:
-                html = f.read()
-            st.components.v1.html(html, height=650)
-            os.unlink(html_path)
+
+# --- Ce bloc est hors de la fonction ---
+with st.spinner("Chargement et génération du graphe fusionné..."):
+    G = build_cskg3_graph()
+    if len(G.nodes) == 0:
+        st.warning("Le graphe fusionné est vide ou n'a pas encore été généré.")
+    else:
+        html_path = draw_pyvis_graph(G)
+        with open(html_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        st.components.v1.html(html, height=650)
+        os.unlink(html_path)
+
 
     st.markdown("---")
 
