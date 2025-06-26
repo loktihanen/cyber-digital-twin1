@@ -716,6 +716,9 @@ elif menu_choice == "🧪 Simulation & DTwin2":
     filtered_services = st.multiselect("🎯 Filtrer les services critiques (ex: HTTP, DB)", options=sorted(services))
     if filtered_services:
         df = df[df["service"].isin(filtered_services)]
+        if df.empty:
+            st.warning("⚠️ Aucun résultat après filtrage des services.")
+            st.stop()
 
     # 2. Heatmap Services vs CVE (pondérée par CVSS)
     pivot_df = df.dropna(subset=["cve", "service", "score"])
@@ -726,11 +729,14 @@ elif menu_choice == "🧪 Simulation & DTwin2":
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    plt.figure(figsize=(12, 8))
-    sns.heatmap(heatmap_data, cmap="Reds", annot=False)
-    plt.title("Impact CVE_UNIFIED sur les services – Digital Twin")
-    st.pyplot(plt.gcf())
-    plt.clf()
+    if heatmap_data.empty or heatmap_data.isna().all().all():
+        st.warning("⚠️ Données insuffisantes ou vides pour générer la heatmap.")
+    else:
+        plt.figure(figsize=(12, 8))
+        sns.heatmap(heatmap_data, cmap="Reds", annot=False)
+        plt.title("Impact CVE_UNIFIED sur les services – Digital Twin")
+        st.pyplot(plt.gcf())
+        plt.clf()
 
     # 3. Graphique temporel : évolution de la criticité
     st.subheader("⏳ Évolution temporelle du score de criticité (basé sur CVE)")
@@ -739,13 +745,16 @@ elif menu_choice == "🧪 Simulation & DTwin2":
     df_time = df_time.dropna(subset=["first_detected"])
     df_time = df_time.groupby(pd.Grouper(key="first_detected", freq="M")).agg({"score": "sum"}).reset_index()
 
-    plt.figure(figsize=(10, 4))
-    plt.plot(df_time["first_detected"], df_time["score"], marker="o", color="blue")
-    plt.title("Évolution mensuelle du score de criticité CVSS")
-    plt.xlabel("Date de première détection")
-    plt.ylabel("Score cumulé CVSS")
-    st.pyplot(plt.gcf())
-    plt.clf()
+    if df_time.empty:
+        st.warning("⚠️ Données temporelles insuffisantes.")
+    else:
+        plt.figure(figsize=(10, 4))
+        plt.plot(df_time["first_detected"], df_time["score"], marker="o", color="blue")
+        plt.title("Évolution mensuelle du score de criticité CVSS")
+        plt.xlabel("Date de première détection")
+        plt.ylabel("Score cumulé CVSS")
+        st.pyplot(plt.gcf())
+        plt.clf()
 
     # 4. Vérification SAME_AS (fusion KG1 ↔ KG2 via CVE_UNIFIED)
     st.subheader("🔁 Vérification des alignements SAME_AS dans le graphe de connaissance")
