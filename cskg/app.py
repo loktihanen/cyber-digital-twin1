@@ -519,6 +519,8 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
     import networkx as nx
     from pyvis.network import Network
     import tempfile
+    import matplotlib.pyplot as plt
+    import seaborn as sns
 
     st.header("🧪 Simulation avec le Jumeau Numérique")
     st.info("Ce module permet de simuler des scénarios cyber à l'aide du graphe fusionné enrichi CVE_UNIFIED et des hôtes réels.")
@@ -610,6 +612,26 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
         st.subheader("🧯 Analyse du risque cumulé")
         total_risk = sum(results.values())
         st.metric("📛 Risque total estimé", f"{total_risk:.2f}")
+
+        # === Heatmap : Propagation vers les services ===
+        st.subheader("📈 Heatmap des scores propagés (Host → Services)")
+
+        # On ne garde que les services dans les résultats
+        service_scores = {node: score for node, score in results.items() if G.nodes[node].get("type") == "Service"}
+
+        if not service_scores:
+            st.info("Aucun service impacté dans cette simulation.")
+        else:
+            df_heat = pd.DataFrame.from_dict(service_scores, orient="index", columns=["Score"])
+            df_heat.index.name = "Service"
+
+            # Création d'une heatmap verticale
+            plt.figure(figsize=(8, max(1, len(df_heat) * 0.5)))
+            sns.heatmap(df_heat.sort_values("Score", ascending=False), cmap="Reds", annot=True, cbar=True, fmt=".2f")
+            plt.title(f"Score de propagation depuis {selected_host}")
+            st.pyplot(plt.gcf())
+            plt.clf()
+
 elif menu_choice == "📊 Simulation Heatmap":
     st.header("📊 Heatmap de vulnérabilité par service")
     st.info("Ce module simule la propagation de CVEs vers les services via les hôtes intermédiaires et génère une heatmap de criticité.")
