@@ -8,11 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      NEO4J_URI: ${{ secrets.NEO4J_URI }}
-      NEO4J_USER: ${{ secrets.NEO4J_USER }}
-      NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -27,7 +22,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run KG1 (NVD)
-        run: python cskg/collect_nvd.py   # 🔗 https://github.com/loktihanen/cyber-digital-twin/blob/main/cskg/collect_nvd.py
+        run: python cskg/collect_nvd.py   # ✅ Corrigé
 
       - name: Run KG2 (Nessus)
         run: python cskg/inject_nessus.py
@@ -45,4 +40,3 @@ jobs:
 
       - name: Generate Visualizations
         run: python cskg/visualization.py
-
