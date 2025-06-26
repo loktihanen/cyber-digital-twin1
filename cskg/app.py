@@ -509,14 +509,15 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
    # st.pyplot(plt.gcf())
 
 elif menu_choice == "🧪 Simulation & Digital Twin":
+    import pandas as pd
+    import networkx as nx
+    from pyvis.network import Network
+    import tempfile
+
     st.header("🧪 Simulation avec le Jumeau Numérique")
     st.info("Ce module permet de simuler des scénarios cyber à l'aide du graphe fusionné enrichi CVE_UNIFIED et des hôtes réels.")
 
-    import networkx as nx
-    import matplotlib.pyplot as plt
-    import pandas as pd
-
-    # ======================== 1. EXTRACTION DU GRAPHE FUSIONNÉ ========================
+    # === 1. Extraction des relations Host → Service avec poids (IMPACTS) ===
     @st.cache_data
     def load_simulation_graph():
         query = """
@@ -531,25 +532,37 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
         st.warning("Aucune relation IMPACTS détectée. Lance d'abord la fusion et la propagation.")
         st.stop()
 
-    # ======================== 2. CONSTRUCTION DU GRAPHE ========================
+    # === 2. Construction du graphe avec NetworkX ===
     G = nx.DiGraph()
     for _, row in df.iterrows():
         host = row["host"]
         service = row["service"]
         weight = row.get("weight", 1.0)
-        G.add_edge(host, service, weight=weight)
+        G.add_node(host, type="Host", label=host, color="#00cc66")
+        G.add_node(service, type="Service", label=service, color="#ffaa00")
+        G.add_edge(host, service, weight=weight, label=f"{weight:.2f}")
 
-    st.markdown("### 🌐 Vue du graphe Host → Service")
-    pos = nx.spring_layout(G, seed=42)
-    plt.figure(figsize=(10, 6))
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color='gray', node_size=1500, font_size=9)
-    edge_labels = nx.get_edge_attributes(G, 'weight')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels={k: f"{v:.2f}" for k, v in edge_labels.items()}, font_color='red')
-    st.pyplot(plt.gcf())
+    # === 3. Visualisation interactive PyVis ===
+    def draw_pyvis(G):
+        net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", directed=True)
+        for node, data in G.nodes(data=True):
+            net.add_node(node, label=data["label"], color=data.get("color", "gray"), title=data["type"])
+        for u, v, data in G.edges(data=True):
+            net.add_edge(u, v, value=float(data.get("weight", 1.0)), title=data.get("label", ""))
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+        net.save_graph(tmp.name)
+        return tmp.name
 
-    # ======================== 3. SCÉNARIO DE SIMULATION ========================
+    st.subheader("🌐 Vue interactive : Host → Service")
+    with st.spinner("Chargement du graphe..."):
+        html_path = draw_pyvis(G)
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        st.components.v1.html(html, height=700, scrolling=True)
+
+    # === 4. Simulation What-If ===
     st.subheader("🧪 Simulation What-If")
-    selected_host = st.selectbox("Choisir un hôte à simuler", list(G.nodes))
+    selected_host = st.selectbox("Choisir un hôte à simuler", sorted([n for n, d in G.nodes(data=True) if d["type"] == "Host"]))
     max_steps = st.slider("Nombre d'étapes de propagation", 1, 5, 2)
     decay = st.slider("Facteur de dissipation", 0.1, 1.0, 0.6)
 
@@ -573,21 +586,11 @@ elif menu_choice == "🧪 Simulation & Digital Twin":
 
         st.markdown("### 📊 Résultats de la simulation")
         df_results = pd.DataFrame(list(results.items()), columns=["Noeud", "Score de propagation"])
-        st.dataframe(df_results)
+        st.dataframe(df_results, use_container_width=True)
 
-        # ======================== 4. ANALYSE DE RISQUE ========================
-        st.subheader("🧯 Analyse du risque cumulé (pondéré)")
+        st.subheader("🧯 Analyse du risque cumulé")
         total_risk = sum(results.values())
         st.metric("📛 Risque total estimé", f"{total_risk:.2f}")
-
-        # Bar chart
-        top_targets = list(results.keys())[:10]
-        plt.figure(figsize=(10, 5))
-        plt.barh(top_targets[::-1], [results[n] for n in top_targets[::-1]], color='crimson')
-        plt.xlabel("Score pondéré (propagation * CVSS)")
-        plt.title(f"Top 10 entités impactées depuis {selected_host}")
-        plt.gca().invert_yaxis()
-        st.pyplot(plt.gcf())
 
 # ======================== 🧠 INFOS DE FIN ========================
 st.sidebar.markdown("---")
