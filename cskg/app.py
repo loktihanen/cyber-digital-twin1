@@ -287,24 +287,28 @@ elif menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
                 G.add_edge(r["from"], r["to"])
         return G
 
-    def draw_pyvis_graph(G):
-        net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
-        net.from_nx(G)
-        for node in net.nodes:
-            sev = G.nodes[node["id"]].get("severity", "").lower()
-            if sev == "critical":
-                node["color"] = "red"
-            elif sev == "high":
-                node["color"] = "orange"
-            elif sev == "medium":
-                node["color"] = "yellow"
-            else:
-                node["color"] = "lightblue"
-            node["title"] = f"Sévérité : {sev}"
-        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-        net.save_graph(tmpfile.name)
-        return tmpfile.name
-
+def draw_pyvis_graph(G):
+    net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
+    net.from_nx(G)
+    for node in net.nodes:
+        node_id = node.get("id") or node.get("label")
+        if node_id and node_id in G.nodes:
+            sev = G.nodes[node_id].get("severity", "").lower()
+        else:
+            sev = ""
+        # Couleur selon la sévérité
+        if sev == "critical":
+            node["color"] = "red"
+        elif sev == "high":
+            node["color"] = "orange"
+        elif sev == "medium":
+            node["color"] = "yellow"
+        else:
+            node["color"] = "lightblue"
+        node["title"] = f"Sévérité : {sev}"
+    tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    net.save_graph(tmpfile.name)
+    return tmpfile.name
     with st.spinner("Chargement et génération du graphe fusionné..."):
         G = build_cskg3_graph()
         if len(G.nodes) == 0:
