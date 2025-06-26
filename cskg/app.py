@@ -41,7 +41,8 @@ menu_choice = st.sidebar.radio(
         "📈 R-GCN & Relation Prediction",
         "🧪 Simulation & Digital Twin",
         #"📊 Simulation Heatmap",
-        #"🧪 Simulation & DTwin2"
+        #"🧪 Simulation & DTwin2",
+        "🧪 Simulation & DTwin222222"
     ]
 )
 
@@ -786,6 +787,154 @@ elif menu_choice == "🧪 Simulation & DTwin2":
     """
     nb = graph_db.run(query_align).evaluate()
     st.success(f"✅ {nb} CVE_UNIFIED alignés via SAME_AS entre KG1 (NVD) et KG2 (Nessus)")
+elif menu_choice == "🧪 Simulation & DTwin222222":
+    import pandas as pd
+    import networkx as nx
+    from pyvis.network import Network
+    import tempfile
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    st.header("🧪 Simulation avec le Jumeau Numérique")
+    st.info("Ce module permet de simuler des scénarios cyber à l'aide du graphe fusionné enrichi CVE_UNIFIED et des hôtes réels.")
+
+    # === 1. Requêtes Neo4j pour les deux vues ===
+    @st.cache_data
+    def load_simulation_graph():
+        query = """
+        MATCH (h:Host)-[r:IMPACTS]->(s:Service)
+        RETURN h.name AS host, s.name AS service, r.weight AS weight
+        """
+        return graph_db.run(query).to_data_frame()
+
+    @st.cache_data
+    def load_enriched_simulation_graph():
+        query = """
+        MATCH (h:Host)-[:DETECTED]->(:Plugin)-[:HAS_CVE]->(c:CVE_UNIFIED)-[r:IMPACTS]->(s:Service)
+        RETURN h.name AS host, c.name AS cve, s.name AS service, r.weight AS weight
+        """
+        return graph_db.run(query).to_data_frame()
+
+    # === 2. Choix de la vue ===
+    view_option = st.radio("🌐 Choisir la vue à afficher :", ["Host → Service", "Host → CVE → Service"])
+
+    if view_option == "Host → Service":
+        df = load_simulation_graph()
+    else:
+        df = load_enriched_simulation_graph()
+
+    if df.empty:
+        st.warning("Aucune relation détectée. Lance d'abord la fusion et la propagation.")
+        st.stop()
+
+    # === 3. Construction du graphe dynamique ===
+    G = nx.DiGraph()
+
+    if view_option == "Host → Service":
+        for _, row in df.iterrows():
+            host = row["host"]
+            service = row["service"]
+            weight = row.get("weight", 1.0)
+
+            try:
+                weight = float(weight)
+                label = f"{weight:.2f}"
+            except (ValueError, TypeError):
+                weight = 1.0
+                label = "1.00"
+
+            G.add_node(host, type="Host", label=host, color="#00cc66")
+            G.add_node(service, type="Service", label=service, color="#ffaa00")
+            G.add_edge(host, service, weight=weight, label=label)
+    else:
+        for _, row in df.iterrows():
+            host = row["host"]
+            cve = row["cve"]
+            service = row["service"]
+            weight = row.get("weight", 1.0)
+
+            try:
+                weight = float(weight)
+                label = f"{weight:.2f}"
+            except (ValueError, TypeError):
+                weight = 1.0
+                label = "1.00"
+
+            G.add_node(host, type="Host", label=host, color="#00cc66")
+            G.add_node(cve, type="CVE", label=cve, color="#ff5555")
+            G.add_node(service, type="Service", label=service, color="#ffaa00")
+            G.add_edge(host, cve, weight=1.0, label="→ CVE")
+            G.add_edge(cve, service, weight=weight, label=label)
+
+    # === 4. Affichage PyVis ===
+    def draw_pyvis(G):
+        net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", directed=True)
+        for node, data in G.nodes(data=True):
+            net.add_node(node, label=data["label"], color=data.get("color", "gray"), title=data.get("type", ""))
+        for u, v, data in G.edges(data=True):
+            net.add_edge(u, v, value=data.get("weight", 1.0), title=data.get("label", ""))
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+        net.save_graph(tmp.name)
+        return tmp.name
+
+    st.subheader(f"🌐 Vue interactive : {view_option}")
+    with st.spinner("Chargement du graphe..."):
+        html_path = draw_pyvis(G)
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        st.components.v1.html(html, height=700, scrolling=True)
+
+    # === 5. Simulation What-If ===
+    st.subheader("🧪 Simulation What-If")
+    host_nodes = [n for n, d in G.nodes(data=True) if d.get("type") == "Host"]
+    if not host_nodes:
+        st.warning("Aucun hôte disponible pour la simulation.")
+        st.stop()
+
+    selected_host = st.selectbox("Choisir un hôte à simuler", sorted(host_nodes))
+    max_steps = st.slider("Nombre d'étapes de propagation", 1, 5, 3)
+    decay = st.slider("Facteur de dissipation", 0.1, 1.0, 0.6)
+
+    def simulate_propagation(G, start_node, decay, max_steps):
+        scores = {start_node: 1.0}
+        frontier = [start_node]
+        for _ in range(max_steps):
+            next_frontier = []
+            for node in frontier:
+                for neighbor in G.successors(node):
+                    edge_weight = G[node][neighbor].get('weight', 1.0)
+                    propagated_score = scores[node] * decay * edge_weight
+                    if propagated_score > scores.get(neighbor, 0):
+                        scores[neighbor] = propagated_score
+                        next_frontier.append(neighbor)
+            frontier = next_frontier
+        return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
+
+    if st.button("🚀 Lancer la simulation"):
+        results = simulate_propagation(G, selected_host, decay, max_steps)
+
+        st.markdown("### 📊 Résultats de la simulation")
+        df_results = pd.DataFrame(list(results.items()), columns=["Noeud", "Score de propagation"])
+        st.dataframe(df_results, use_container_width=True)
+
+        st.subheader("🧯 Analyse du risque cumulé")
+        total_risk = sum(results.values())
+        st.metric("📛 Risque total estimé", f"{total_risk:.2f}")
+
+        # Heatmap : uniquement les services
+        st.subheader("📈 Heatmap des scores propagés (Host → Services)")
+        service_scores = {node: score for node, score in results.items() if G.nodes[node].get("type") == "Service"}
+
+        if not service_scores:
+            st.info("Aucun service impacté dans cette simulation.")
+        else:
+            df_heat = pd.DataFrame.from_dict(service_scores, orient="index", columns=["Score"])
+            df_heat.index.name = "Service"
+            plt.figure(figsize=(8, max(1, len(df_heat) * 0.5)))
+            sns.heatmap(df_heat.sort_values("Score", ascending=False), cmap="Reds", annot=True, cbar=True, fmt=".2f")
+            plt.title(f"Score de propagation depuis {selected_host}")
+            st.pyplot(plt.gcf())
+            plt.clf()
 
 # ======================== 🧠 INFOS DE FIN ========================
 st.sidebar.markdown("---")
