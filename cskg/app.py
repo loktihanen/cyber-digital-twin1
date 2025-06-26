@@ -1,3 +1,4 @@
+# ======================== 0. IMPORTS ========================
 import streamlit as st
 from py2neo import Graph
 import pandas as pd
@@ -6,47 +7,33 @@ from pyvis.network import Network
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import os
-# ======================== CONFIGURATION STREAMLIT ========================
-st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
-st.title("🧠 Cyber Digital Twin Viewer (KG1 & KG2)")
 
-# ======================== 2. CONNEXION NEO4J ======================
-# Connexion Neo4j Aura Free avec paramètres codés en dur
-
-from py2neo import Graph
-
-uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
-user = "neo4j"
-password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-
-# Initialisation de la connexion au graphe Neo4j Aura
-graph = Graph(uri, auth=(user, password))
-
-# Test rapide de connexion (optionnel)
-try:
-    info = graph.run("RETURN 1").data()
-    print("Connexion Neo4j réussie :", info)
-except Exception as e:
-    print("Erreur de connexion Neo4j :", e)
-
-# ======================== 2. CONFIG & TITRE ========================
+# ======================== 1. CONFIGURATION STREAMLIT ========================
 st.set_page_config(page_title="Cyber Digital Twin", layout="wide")
 st.title("🛡️ Cyber Digital Twin – Visualisation des KG")
 
 st.markdown("""
 Ce tableau de bord permet d'explorer :
-- **KG1** : Vulnérabilités NVD (CVE, CWE, CPE)
-- **KG2** : Résultats Nessus (Host, Plugin, CVE)
-- **KG3** : Graphe fusionné et enrichi (CVE_UNIFIED)
+- **KG1** : Vulnérabilités NVD (CVE, CWE, CPE)  
+- **KG2** : Résultats Nessus (Host, Plugin, CVE)  
+- **KG3** : Graphe fusionné et enrichi (CVE_UNIFIED)  
 
 📘 Ontologies : `UCO`, `STUCCO`  
 🔎 Techniques : `NER`, `Alignement`, `Embedding`, `Reasoning`
 """)
 
-# ======================== 3. CHOIX DU KG ========================
-kg_option = st.selectbox("🧠 Choisir le graphe à afficher :", ["KG1 - NVD", "KG2 - Nessus", "KG3 - Fusionné"])
+# ======================== 2. CONNEXION NEO4J ========================
+@st.cache_resource
+def connect_neo4j():
+    uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+    user = "neo4j"
+    password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+    return Graph(uri, auth=(user, password))
 
-# ======================== 4. PARAMÈTRES ========================
+graph = connect_neo4j()
+
+# ======================== 3. PARAMÈTRES ========================
+kg_option = st.selectbox("🧠 Choisir le graphe à afficher :", ["KG1 - NVD", "KG2 - Nessus", "KG3 - Fusionné"])
 st.sidebar.header("🎛️ Filtres")
 max_links = st.sidebar.slider("Nombre max de relations", 50, 1000, 300)
 entity_filter = st.sidebar.multiselect(
@@ -55,7 +42,7 @@ entity_filter = st.sidebar.multiselect(
     default=["CVE", "CVE_UNIFIED", "Plugin", "Host"]
 )
 
-# ======================== 5. REQUÊTES PAR KG ========================
+# ======================== 4. REQUÊTES PAR KG ========================
 @st.cache_data
 def get_graph_data(kg: str, limit: int):
     if kg == "KG1 - NVD":
@@ -73,7 +60,7 @@ def get_graph_data(kg: str, limit: int):
                'Host' AS source_type, 'CVE' AS target_type
         LIMIT {limit}
         """
-    else:  # KG3
+    else:  # KG3 fusionné
         query = f"""
         MATCH (a:CVE_UNIFIED)-[r]->(b)
         RETURN a.name AS source, type(r) AS relation, b.name AS target,
@@ -84,7 +71,7 @@ def get_graph_data(kg: str, limit: int):
 
 data = get_graph_data(kg_option, max_links)
 
-# ======================== 6. CONSTRUCTION DU GRAPHE ========================
+# ======================== 5. CONSTRUCTION DU GRAPHE ========================
 G = nx.DiGraph()
 color_map = {
     "CVE": "#ff4d4d", "CVE_UNIFIED": "#ffcc00", "CWE": "#ffa500", "CPE": "#6699cc",
@@ -106,8 +93,9 @@ for row in data:
     except:
         skipped += 1
 
-# ======================== 7. PYVIS INTERACTIVE ========================
+# ======================== 6. VISUALISATION INTERACTIVE PYVIS ========================
 st.subheader("🌐 Visualisation interactive (`pyvis`)")
+
 net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
 
 for node, data in G.nodes(data=True):
@@ -116,13 +104,14 @@ for node, data in G.nodes(data=True):
 for src, tgt, data in G.edges(data=True):
     net.add_edge(src, tgt, title=data.get("label", ""))
 
-path = "/tmp/graph.html"
-net.show(path)
+path = "graph.html"  # ✅ fichier accessible localement ou sur Streamlit Cloud
+net.write_html(path)  # ✅ fix du bug avec show()
+
 with open(path, 'r', encoding='utf-8') as f:
     html = f.read()
     st.components.v1.html(html, height=700, scrolling=True)
 
-# ======================== 8. VISUALISATION MATPLOTLIB ========================
+# ======================== 7. VISUALISATION STATIQUE MATPLOTLIB ========================
 st.subheader("📊 Visualisation statique (`matplotlib`)")
 node_colors = [color_map.get(G.nodes[n]["type"], "#cccccc") for n in G.nodes()]
 pos = nx.spring_layout(G, k=0.25, seed=42)
@@ -141,18 +130,17 @@ plt.title(f"Graphe {kg_option}")
 plt.axis("off")
 st.pyplot(plt)
 
-# ======================== 9. TABLEAUX ========================
+# ======================== 8. TABLEAU DES RELATIONS ========================
 st.subheader("📄 Relations extraites")
 df = pd.DataFrame(data)
 st.dataframe(df, use_container_width=True)
 
-# ======================== 10. STATISTIQUES ========================
+# ======================== 9. STATS ========================
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"✅ Nœuds : {G.number_of_nodes()}")
 st.sidebar.markdown(f"✅ Arêtes : {G.number_of_edges()}")
 st.sidebar.markdown(f"⚠️ Lignes ignorées : {skipped}")
 st.sidebar.markdown(f"📊 Densité : {nx.density(G):.4f}")
 st.sidebar.info("Projet de M2 — Cyber Digital Twin avec graphes KG1, KG2, KG3")
-
 
 
