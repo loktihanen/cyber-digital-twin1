@@ -35,7 +35,8 @@ menu_choice = st.sidebar.radio(
         "🔀 CSKG3 – Fusion NVD + Nessus",
         "🔮 Embeddings & RotatE Prediction",
         "📈 R-GCN & Relation Prediction",
-        "🧪 Simulation & Digital Twin"
+        "🧪 Simulation & Digital Twin",
+        "📊 Simulation Heatmap"
     ]
 )
 
