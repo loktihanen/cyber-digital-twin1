@@ -514,7 +514,7 @@ elif menu == "Simulation":
             st.dataframe(df_critical.style.background_gradient(cmap="OrRd"), use_container_width=True)
         else:
             st.info("Aucun service vulnérable détecté dans cette simulation.")
-elif menu == "Recommandation":
+elif menu == "🎯 Recommandation":
 
     import streamlit as st
     import pandas as pd
@@ -522,23 +522,23 @@ elif menu == "Recommandation":
     from pyattck import Attck
     from transformers import pipeline
     from py2neo import Graph
-    from rdflib import Graph as RDFGraph, Namespace, URIRef, Literal, RDF
+    from rdflib import Graph as RDFGraph, Namespace, URIRef
     from owlrl import DeductiveClosure, OWLRL_Semantics
     from rdflib.plugins.sparql import prepareQuery
 
     st.header("🎯 Moteur de Recommandation Cybersécurité")
     st.info("Extraction depuis Neo4j + inférence OWL automatique + enrichissement NVD, mapping ATT&CK et recommandations NLP.")
 
-    # === 1. Connexion Neo4j Aura et extraction vulnérabilités ===
+    # Connexion Neo4j Aura
     uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
     user = "neo4j"
     password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
     graph = Graph(uri, auth=(user, password))
 
-    st.write("⏳ Extraction des relations `at_risk_of` depuis Neo4j...")
+    st.write("⏳ Extraction des relations `IS_VULNERABLE_TO` depuis Neo4j...")
 
     query = """
-    MATCH (asset)-[r:AT_RISK_OF]->(cve)
+    MATCH (asset)-[r:IS_VULNERABLE_TO]->(cve)
     WHERE asset.name IS NOT NULL AND cve.name IS NOT NULL
     RETURN asset.name AS asset, cve.name AS cve
     """
@@ -550,21 +550,19 @@ elif menu == "Recommandation":
         st.stop()
 
     if not records:
-        st.warning("Aucune relation `AT_RISK_OF` trouvée dans la base Neo4j.")
+        st.warning("Aucune relation `IS_VULNERABLE_TO` trouvée dans la base Neo4j.")
         st.stop()
 
-    # === 2. Construction RDF et inférence OWL ===
+    # Construction RDF + inférence OWL
     rdf_graph = RDFGraph()
     CYBER = Namespace("http://example.org/cyber#")
     rdf_graph.bind("cyber", CYBER)
 
-    # Ajout des triplets asset cyber:at_risk_of cve
     for rec in records:
         asset_uri = URIRef(CYBER + rec["asset"].replace(" ", "_"))
         cve_uri = URIRef(CYBER + rec["cve"].replace(" ", "_"))
-        rdf_graph.add((asset_uri, CYBER.at_risk_of, cve_uri))
+        rdf_graph.add((asset_uri, CYBER.is_vulnerable_to, cve_uri))  # note le prédicat en minuscules
 
-    # Application du raisonnement OWL
     st.write("⏳ Application du raisonnement OWL...")
     try:
         DeductiveClosure(OWLRL_Semantics).expand(rdf_graph)
@@ -574,11 +572,11 @@ elif menu == "Recommandation":
         st.error(f"Erreur lors de l’inférence OWL : {e}")
         st.stop()
 
-    # === 3. Requête SPARQL sur graphe inféré ===
+    # Requête SPARQL adaptée à la nouvelle relation
     query_sparql = prepareQuery("""
     PREFIX cyber: <http://example.org/cyber#>
     SELECT ?asset ?cve WHERE {
-      ?asset cyber:at_risk_of ?cve .
+      ?asset cyber:is_vulnerable_to ?cve .
     }
     """)
 
@@ -592,7 +590,6 @@ elif menu == "Recommandation":
     st.subheader("✅ Vulnérabilités identifiées après inférence")
     st.dataframe(df_vuln)
 
-    # === 4. Enrichissement NVD ===
     @st.cache_data(show_spinner=False)
     def enrich_cve(cve_id):
         try:
@@ -611,20 +608,15 @@ elif menu == "Recommandation":
     st.subheader("📝 Détails NVD")
     st.dataframe(df[["CVE", "cvss"]])
 
-    # === 5. Mapping MITRE ATT&CK ===
     at = Attck()
 
-    # Exemple simple de mapping, à améliorer en fonction des données MITRE disponibles
     def map_attack(cve_id):
-        # Ici on simule la correspondance avec quelques techniques ATT&CK
-        # Vous pouvez enrichir via pyattck ou API officielle MITRE ATT&CK
-        return ["T1078", "T1059"]  # Exemple: Valid Accounts, Command and Scripting Interpreter
+        return ["T1078", "T1059"]  # Exemples simplifiés
 
     df["MITRE"] = df["CVE"].apply(map_attack)
     st.subheader("🛡️ Techniques ATT&CK associées")
     st.dataframe(df[["CVE", "MITRE"]])
 
-    # === 6. Recommandations NLP avec Transformers ===
     st.write("⏳ Génération des recommandations NLP...")
     nlp = pipeline("text2text-generation", model="google/flan-t5-small")
 
@@ -643,7 +635,6 @@ elif menu == "Recommandation":
     st.subheader("✅ Recommandations générées")
     st.dataframe(df[["Asset", "CVE", "cvss", "MITRE", "Recommendation"]])
 
-    # === 7. Export CSV ===
     csv_data = df.to_csv(index=False).encode("utf-8")
     st.download_button("⬇️ Télécharger les recommandations CSV", data=csv_data, file_name="recommandations_cyber.csv", mime="text/csv")
 
