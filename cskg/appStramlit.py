@@ -58,7 +58,7 @@ if menu == "CSKG1 – NVD":
     MATCH (h)-[r]->(t)
     WHERE h.name IS NOT NULL AND t.name IS NOT NULL
     RETURN h.name AS head, type(r) AS relation, t.name AS tail, labels(h)[0] AS head_type, labels(t)[0] AS tail_type
-    LIMIT 200
+    LIMIT 2000
     """
     results = graph.run(query).data()
     df = pd.DataFrame(results)
