@@ -483,6 +483,26 @@ elif menu == "Simulation":
     nx.draw_networkx_edge_labels(G_attack, pos, edge_labels=edge_labels)
     st.pyplot(plt.gcf())
     plt.clf()
+        # ======================== 7. 🧨 Analyse de risque simulée ========================
+    st.subheader("🧨 Analyse de Risque Étendue")
+
+    if st.button("🧨 Lancer une attaque simulée ciblée"):
+        target_asset = st.selectbox("🎯 Choisir l'actif critique cible", sorted(G_nx.nodes))
+        impacted = simulate_propagation(G_nx, target_asset, decay=0.5, max_depth=4)
+        critical_services = {n: s for n, s in impacted.items() if G_nx.nodes[n].get("type") == "Service"}
+        
+        if critical_services:
+            df_critical = pd.DataFrame.from_dict(critical_services, orient="index", columns=["RiskScore"])
+            df_critical.index.name = "Service"
+            df_critical = df_critical.sort_values("RiskScore", ascending=False).head(10)
+
+            st.subheader("🔥 TOP 10 services les plus vulnérables")
+            st.bar_chart(df_critical)
+
+            st.subheader("📉 Détails des services critiques")
+            st.dataframe(df_critical.style.background_gradient(cmap="OrRd"), use_container_width=True)
+        else:
+            st.info("Aucun service vulnérable détecté dans cette simulation.")
 
 # ========== Heatmap ==========
 elif menu == "Heatmap":
