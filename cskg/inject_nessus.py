@@ -56,7 +56,7 @@ rdf_graph.serialize(destination="kg2.ttl", format="turtle")
 print("✅ Ontologie KG2 RDF exportée : kg2.ttl")
 
 # ======================== 4. CHARGEMENT CSV NESSUS ========================
-NESSUS_CSV_PATH = "/data/nessuss-scan1.csv"
+NESSUS_CSV_PATH = "data/nessuss-scan1.csv"
 
 def load_nessus_data(path):
     df = pd.read_csv(path)
