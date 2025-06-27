@@ -6,6 +6,8 @@ from pyvis.network import Network
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from py2neo import Graph
+
 @st.cache_resource
 def connect_neo4j():
     try:
