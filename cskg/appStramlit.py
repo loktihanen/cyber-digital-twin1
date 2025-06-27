@@ -327,6 +327,8 @@ elif menu == "CSKG3 – Fusionné":
 
 # ========== Simulation ==========
 elif menu == "🧪 Simulation":
+    st.header("Simulation")
+    st.info("Visualisation du graphe résultant de la fusion entre les CVE issues de la NVD et celles issues des scans Nessus, via des relations SAME_AS vers des nœuds CVE_UNIFIED.")
 
     import streamlit as st
     from py2neo import Graph, NodeMatcher
