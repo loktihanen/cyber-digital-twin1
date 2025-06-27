@@ -6,6 +6,21 @@ from pyvis.network import Network
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+@st.cache_resource
+def connect_neo4j():
+    try:
+        uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+        user = "neo4j"
+        password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+        graph = Graph(uri, auth=(user, password))
+        graph.run("RETURN 1").evaluate()
+        st.success("✅ Connexion Neo4j Aura réussie")
+        return graph
+    except Exception as e:
+        st.error(f"❌ Erreur de connexion Neo4j : {e}")
+        st.stop()
+
+graph_db = connect_neo4j()
 
 st.set_page_config(page_title="CSKG Dashboard", layout="wide")
 
@@ -21,26 +36,97 @@ menu = st.sidebar.radio("📌 Menu", [
 
 # ========== CSKG1 – NVD ==========
 if menu == "CSKG1 – NVD":
-    st.title("🧠 CSKG1 – Graphe de connaissances NVD")
-    st.info("Affichage du graphe de connaissances basé sur les vulnérabilités connues issues de la base NVD.")
-    
-    # --- Extrait de données simulées
-    df = pd.DataFrame({
-        "CVE": ["CVE-2024-1234", "CVE-2024-5678"],
-        "Produit": ["Apache", "OpenSSL"],
-        "Score": [9.8, 7.5]
-    })
-    st.dataframe(df)
+    from py2neo import Graph
+    from pyvis.network import Network
+    import pandas as pd
+    import tempfile
+    import os
 
-    # --- Exemple simple de visualisation graphe
-    G = nx.Graph()
-    G.add_edges_from([("Apache", "CVE-2024-1234"), ("OpenSSL", "CVE-2024-5678")])
-    net = Network(notebook=False, height="400px", width="100%")
-    net.from_nx(G)
-    net.save_graph("cskg1.html")
-    with open("cskg1.html", 'r', encoding='utf-8') as f:
-        html = f.read()
-    st.components.v1.html(html, height=450)
+    st.title("🧠 CSKG1 – Graphe de connaissances NVD")
+    st.info("Visualisation interactive du graphe extrait automatiquement depuis la NVD via l'API officielle et enrichi dans Neo4j.")
+
+    # Connexion à Neo4j
+    uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+    user = "neo4j"
+    password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+    graph = Graph(uri, auth=(user, password))
+
+    # Récupération des triplets NVD
+    query = """
+    MATCH (h)-[r]->(t)
+    WHERE h.name IS NOT NULL AND t.name IS NOT NULL
+    RETURN h.name AS head, type(r) AS relation, t.name AS tail, labels(h)[0] AS head_type, labels(t)[0] AS tail_type
+    LIMIT 200
+    """
+    results = graph.run(query).data()
+    df = pd.DataFrame(results)
+
+    if df.empty:
+        st.warning("⚠️ Aucun triplet trouvé dans Neo4j. Exécute le pipeline KG1 pour alimenter la base.")
+    else:
+        st.success(f"✅ {len(df)} triplets extraits de Neo4j pour le graphe NVD.")
+
+        # === Statistiques par type ===
+        cve_count = graph.run("MATCH (n:CVE) RETURN count(n) AS count").evaluate()
+        cpe_count = graph.run("MATCH (n:CPE) RETURN count(n) AS count").evaluate()
+        cwe_count = graph.run("MATCH (n:CWE) RETURN count(n) AS count").evaluate()
+        capec_count = graph.run("MATCH (n:CAPEC) RETURN count(n) AS count").evaluate()
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("🛑 CVE", cve_count)
+        col2.metric("🧩 CPE", cpe_count)
+        col3.metric("📦 CWE", cwe_count)
+        col4.metric("🎯 CAPEC", capec_count)
+
+        # === Statistiques structurelles ===
+        num_nodes = len(set(df["head"].tolist() + df["tail"].tolist()))
+        num_edges = len(df)
+        max_possible_edges = num_nodes * (num_nodes - 1)
+        density = round(num_edges / max_possible_edges, 4) if max_possible_edges > 0 else 0.0
+
+        st.subheader("📐 Statistiques structurelles du graphe")
+        st.write(f"🔢 Nombre total de nœuds distincts : `{num_nodes}`")
+        st.write(f"🔁 Nombre total de relations (arêtes) : `{num_edges}`")
+        st.write(f"📊 Densité approximative du graphe : `{density}`")
+
+        # === Visualisation Pyvis ===
+        G = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
+        node_colors = {
+            "CVE": "red",
+            "CPE": "orange",
+            "CWE": "green",
+            "CAPEC": "purple",
+            "Vendor": "blue",
+            "Product": "yellow",
+            "Version": "lightblue",
+            "Entity": "gray"
+        }
+
+        added_nodes = set()
+
+        for _, row in df.iterrows():
+            h, r, t = row["head"], row["relation"], row["tail"]
+            h_type = row["head_type"]
+            t_type = row["tail_type"]
+
+            if h not in added_nodes:
+                G.add_node(h, label=h, color=node_colors.get(h_type, "white"), title=h_type)
+                added_nodes.add(h)
+            if t not in added_nodes:
+                G.add_node(t, label=t, color=node_colors.get(t_type, "white"), title=t_type)
+                added_nodes.add(t)
+
+            G.add_edge(h, t, label=r)
+
+        # Sauvegarde temporaire et affichage
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+            G.save_graph(tmp_file.name)
+            html_content = open(tmp_file.name, 'r', encoding='utf-8').read()
+            st.components.v1.html(html_content, height=600, scrolling=True)
+
+        # Aperçu tabulaire
+        with st.expander("🔍 Aperçu des relations (triplets)"):
+            st.dataframe(df[["head", "relation", "tail"]])
 
 # ========== CSKG2 – Nessus ==========
 elif menu == "CSKG2 – Nessus":
