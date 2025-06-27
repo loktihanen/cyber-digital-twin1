@@ -227,12 +227,9 @@ elif menu == "CSKG2 – Nessus":
     st.dataframe(df, use_container_width=True)
 
 # ========== CSKG3 – Fusionné ==========
-elif menu == "CSKG3 – Fusionné":
-    import networkx as nx
-    from pyvis.network import Network
-    import tempfile
-    import os
 
+# ======================== BLOC CSKG3 ========================
+if menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
     st.info("Visualisation du graphe résultant de la fusion entre les CVE issues de la NVD et celles issues des scans Nessus, via des relations SAME_AS vers des nœuds CVE_UNIFIED.")
 
@@ -245,7 +242,7 @@ elif menu == "CSKG3 – Fusionné":
            labels(a)[0] AS source_type, labels(b)[0] AS target_type
     LIMIT 500
     """
-    data = graph.run(query).data()
+    data = graph_db.run(query).data()
 
     # === Construction du graphe NetworkX ===
     G = nx.DiGraph()
@@ -276,17 +273,17 @@ elif menu == "CSKG3 – Fusionné":
         G.add_edge(src, tgt, label=rel)
 
     # === Statistiques de fusion
-    nb_unifies = graph.run("""
+    nb_unifies = graph_db.run("""
         MATCH (cveu:CVE_UNIFIED)-[:SAME_AS]->(:CVE)
         RETURN count(DISTINCT cveu) AS nb
     """).evaluate()
 
-    total_fusionnees = graph.run("""
+    total_fusionnees = graph_db.run("""
         MATCH (c:CVE)-[:SAME_AS]-(:CVE)
         RETURN count(DISTINCT c) AS total
     """).evaluate()
 
-    same_as_total = graph.run("""
+    same_as_total = graph_db.run("""
         MATCH (:CVE)-[r:SAME_AS]-(:CVE)
         RETURN count(r) AS total
     """).evaluate()
@@ -295,7 +292,7 @@ elif menu == "CSKG3 – Fusionné":
     def draw_pyvis_graph(G):
         net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
         for node, data in G.nodes(data=True):
-            node_type = data.get("type", "Unknown")
+            node_type = data.get("type", "gray")
             color = color_map.get(node_type, "gray")
             net.add_node(node, label=data.get("label", node), color=color, title=node_type)
         for src, tgt, data in G.edges(data=True):
@@ -348,7 +345,6 @@ elif menu == "CSKG3 – Fusionné":
         )
     else:
         st.warning("⚠️ Fichier `kg3.ttl` non trouvé. Exécute d'abord `rdf_export.py` ou le pipeline d'alignement KG3.")
-
 
 # ========== Simulation ==========
 elif menu == "Simulation":
