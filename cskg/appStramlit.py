@@ -394,7 +394,9 @@ elif menu == "Simulation":
         st.error(f"Erreur SPARQL ou inférence non disponible : {e}")
 
     # ======================== 4. 🌐 Vue interactive PyVis ========================
+    # ======================== 4. 🌐 Vue interactive PyVis ========================
     st.subheader("🌐 Visualisation interactive Host → Service")
+    
     G_nx = nx.DiGraph()
     for _, row in df_impacts.iterrows():
         host = row['host']
@@ -405,22 +407,66 @@ elif menu == "Simulation":
         except:
             weight = 1.0
 
-        G_nx.add_node(host, label=host, color="#00cc66", type="Host")
-        G_nx.add_node(service, label=service, color="#ffaa00", type="Service")
+        G_nx.add_node(host, label=host, color="#1f78b4", title="🖥️ Host", shape="dot", size=25)
+        G_nx.add_node(service, label=service, color="#ff7f0e", title="🛠️ Service", shape="triangle", size=15)
         G_nx.add_edge(host, service, weight=weight)
 
-    net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", directed=True)
+    # Création du réseau PyVis
+    net = Network(height="750px", width="100%", bgcolor="#202020", font_color="white", directed=True)
+    net.set_options("""
+    var options = {
+      "nodes": {
+        "borderWidth": 2,
+        "shadow": true,
+        "font": {
+          "color": "white",
+          "face": "Arial"
+        }
+      },
+      "edges": {
+        "color": {
+          "color": "#cccccc"
+        },
+        "smooth": {
+          "type": "dynamic"
+        },
+        "arrows": {
+          "to": {
+            "enabled": true,
+            "scaleFactor": 0.6
+          }
+        }
+      },
+      "physics": {
+        "enabled": true,
+        "solver": "forceAtlas2Based",
+        "forceAtlas2Based": {
+          "gravitationalConstant": -50,
+          "centralGravity": 0.01,
+          "springLength": 120,
+          "springConstant": 0.08
+        },
+        "minVelocity": 0.75
+      },
+      "interaction": {
+        "hover": true,
+        "navigationButtons": true,
+        "tooltipDelay": 200
+      }
+    }
+    """)
+
     for node, data in G_nx.nodes(data=True):
-        net.add_node(node, label=data.get("label", node), color=data.get("color", "gray"), title=data.get("type", ""))
+        net.add_node(node, label=data.get("label", node), title=data.get("title", ""), color=data.get("color"), shape=data.get("shape", "dot"), size=data.get("size", 20))
     for u, v, data in G_nx.edges(data=True):
         w = data.get("weight", 1.0)
-        net.add_edge(u, v, value=w, title=f"Poids : {w:.2f}")
+        net.add_edge(u, v, value=w, title=f"💥 Poids : {w:.2f}", color="#AAAAAA")
 
     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
     net.save_graph(tmpfile.name)
     with open(tmpfile.name, "r", encoding="utf-8") as f:
         html = f.read()
-    st.components.v1.html(html, height=700, scrolling=True)
+    st.components.v1.html(html, height=750, scrolling=False)
 
     # ======================== 5. 🚀 Simulation What-If ========================
     st.subheader("🚀 Simulation What-If (Propagation de risque)")
