@@ -5,9 +5,6 @@ import os
 
 # ======================== 2. CONNEXION NEO4J =======================
 # Connexion Neo4j Aura Free avec paramètres codés en dur
-
-from py2neo import Graph
-
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
@@ -39,6 +36,10 @@ def inject_nessus_to_neo4j(df):
         plugin_name = row.get("Name", "")
         port = str(row.get("Port", ""))
         protocol = row.get("Protocol", "")
+        service = row.get("Service", "")
+        os_name = row.get("Operating System", "")
+        severity = row.get("Severity", "")
+        scanner = row.get("Scanner", "Nessus")
         cve_list = str(row.get("CVE", "")).split(",")
 
         # 🔹 Noeud Host
@@ -58,6 +59,26 @@ def inject_nessus_to_neo4j(df):
         else:
             graph.merge(Relationship(host_node, "RUNS_PLUGIN", plugin_node))
 
+        # 🔹 Service
+        if service:
+            service_node = Node("Service", name=service)
+            graph.merge(service_node, "Service", "name")
+            graph.merge(Relationship(host_node, "HAS_SERVICE", service_node))
+            if port:
+                graph.merge(Relationship(service_node, "RUNS_ON_PORT", port_node))
+
+        # 🔹 Operating System
+        if os_name:
+            os_node = Node("OperatingSystem", name=os_name)
+            graph.merge(os_node, "OperatingSystem", "name")
+            graph.merge(Relationship(host_node, "HAS_OS", os_node))
+
+        # 🔹 Scanner
+        if scanner:
+            scanner_node = Node("Scanner", name=scanner)
+            graph.merge(scanner_node, "Scanner", "name")
+            graph.merge(Relationship(host_node, "SCANNED_BY", scanner_node))
+
         # 🔹 CVE(s)
         for cve in cve_list:
             cve = cve.strip()
@@ -65,6 +86,13 @@ def inject_nessus_to_neo4j(df):
                 cve_node = Node("CVE", name=cve, source="Nessus")
                 graph.merge(cve_node, "CVE", "name")
                 graph.merge(Relationship(plugin_node, "DETECTS", cve_node))
+                graph.merge(Relationship(host_node, "VULNERABLE_TO", cve_node))
+
+        # 🔹 Severity
+        if severity:
+            severity_node = Node("Severity", level=severity)
+            graph.merge(severity_node, "Severity", "level")
+            graph.merge(Relationship(host_node, "HAS_SEVERITY", severity_node))
 
 # ======================== 5. PIPELINE ========================
 def pipeline_kg2():
