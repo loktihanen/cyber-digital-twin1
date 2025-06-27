@@ -35,7 +35,8 @@ jobs:
          pip install torch-spline-conv -f https://data.pyg.org/whl/torch-2.1.0+cpu.html
          pip install torch-geometric
 
-
+      - name: Install other dependencies
+        run: pip install -r requirements.txt
 
 
 
