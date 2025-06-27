@@ -503,6 +503,84 @@ elif menu == "Simulation":
             st.dataframe(df_critical.style.background_gradient(cmap="OrRd"), use_container_width=True)
         else:
             st.info("Aucun service vulnérable détecté dans cette simulation.")
+elif menu == "Recommandation":
+
+    import streamlit as st
+    import pandas as pd
+    import nvdlib  # 🔄 API NVD (via nvdlib) :contentReference[oaicite:4]{index=4}
+    from pyattck import Attck  # mapping MITRE ATT&CK :contentReference[oaicite:5]{index=5}
+    from transformers import pipeline
+    from rdflib import Graph as RDFGraph, Namespace
+    from rdflib.plugins.sparql import prepareQuery
+
+    st.header("🎯 Moteur de Recommandation Cybersécurité")
+    st.info("Enrichissement via NVD, mapping ATT&CK et recommandations NLP.")
+
+    # === 1. Chargement CVE détectées (OWL inféré) ===
+    uploaded = st.file_uploader("📂 Uploader `cskg3_inferenced.ttl`", type="ttl")
+    if not uploaded:
+        st.warning("📌 Uploadez d’abord le fichier OWL inféré.")
+        st.stop()
+    rdf = RDFGraph()
+    rdf.parse(uploaded, format="turtle")
+    CYBER = Namespace("http://example.org/cyber#")
+    rdf.bind("cyber", CYBER)
+
+    q = prepareQuery("""
+      PREFIX cyber: <http://example.org/cyber#>
+      SELECT ?asset ?cve WHERE { ?asset cyber:at_risk_of ?cve . }
+    """)
+    rows = rdf.query(q)
+    vulns = [(row.asset.split("#")[-1], row.cve.split("#")[-1]) for row in rows]
+    df = pd.DataFrame(vulns, columns=["Asset", "CVE"])
+    if df.empty:
+        st.warning("Aucune vulnérabilité trouvée.")
+        st.stop()
+    st.subheader("✅ Vulnérabilités identifiées")
+    st.dataframe(df)
+
+    # === 2. Enrichissement NVD ===
+    def enrich_cve(cve_id):
+        try:
+            cve = nvdlib.searchCVE(cveId=cve_id)[0]
+            return {
+              "cvss": cve.v31score,
+              "desc": cve.descriptions[0].value
+            }
+        except Exception:
+            return {"cvss": None, "desc": ""}
+    df_en = df["CVE"].apply(enrich_cve).apply(pd.Series)
+    df = pd.concat([df, df_en], axis=1)
+    st.subheader("📝 Détails NVD")
+    st.dataframe(df[["CVE", "cvss"]])
+
+    # === 3. Mapping MITRE ATT&CK ===
+    at = Attck()
+    def map_attack(cve_id):
+        # on simule : retourne techniques connues liées au CVE
+        return ["T1078","T1059"]
+    df["MITRE"] = df["CVE"].apply(map_attack)
+    st.subheader("🛡️ Techniques ATT&CK associées")
+    st.dataframe(df[["CVE","MITRE"]])
+
+    # === 4. Recommandations NLP ===
+    nlp = pipeline("text2text-generation", model="google/flan-t5-small")
+    def recommend(row):
+        prompt = (
+          f"CVE: {row.CVE}\n"
+          f"Score: {row.cvss}\n"
+          f"Techniques: {', '.join(row.MITRE)}\n"
+          "Que recommandes-tu ?"
+        )
+        out = nlp(prompt, max_length=64)[0]["generated_text"]
+        return out
+    df["Recommendation"] = df.apply(recommend, axis=1)
+    st.subheader("✅ Recommandations NLP")
+    st.dataframe(df[["Asset","CVE","cvss","MITRE","Recommendation"]])
+
+    # === 5. Export ===
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Télécharger CSV", data=csv, file_name="reco.csv", mime="text/csv")
 
 # ========== Heatmap ==========
 elif menu == "Heatmap":
