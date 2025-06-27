@@ -47,7 +47,7 @@ menu = st.sidebar.radio("📌 Menu", [
     "CSKG3 – Fusionné",
     "Simulation",
     "Recommandation",
-    "Heatmap"
+  #  "Heatmap"
 ])
 
 # ========== CSKG1 – NVD =========
