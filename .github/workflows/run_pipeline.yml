@@ -20,11 +20,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run KG1 (NVD)
-        run: python cskg/collect_nvd.py
+      #- name: Run KG1 (NVD)
+        #run: python cskg/collect_nvd.py
 
-      - name: Run KG2 (Nessus)
-        run: python cskg/inject_nessus.py
+      #- name: Run KG2 (Nessus)
+        #run: python cskg/inject_nessus.py
 
       - name: Run Alignment & Fusion
         run: |
