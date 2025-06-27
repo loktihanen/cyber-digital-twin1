@@ -323,22 +323,22 @@ elif menu == "CSKG3 – Fusionné":
     with col3:
         st.metric("🧬 Nœuds CVE_UNIFIED", nb_unifies)
 
-    st.markdown("---")
-    st.subheader("📤 RDF fusionné (Turtle)")
-    rdf_file = "kg3.ttl"
-    if os.path.exists(rdf_file):
-        with open(rdf_file, "r", encoding="utf-8") as f:
-            rdf_content = f.read()
-        st.download_button(
-            label="📥 Télécharger RDF (kg3.ttl)",
-            data=rdf_content,
-            file_name="kg3.ttl",
-            mime="text/turtle"
-        )
-    else:
-        st.warning("⚠️ Fichier `kg3.ttl` non trouvé. Exécute d'abord `rdf_export.py` ou le pipeline d'alignement KG3.")
-  else:
-    st.write("Sélectionnez une option dans le menu.")
+    #st.markdown("---")
+    #st.subheader("📤 RDF fusionné (Turtle)")
+  #  rdf_file = "kg3.ttl"
+  #  if os.path.exists(rdf_file):
+      #  with open(rdf_file, "r", encoding="utf-8") as f:
+         #   rdf_content = f.read()
+        #st.download_button(
+         #   label="📥 Télécharger RDF (kg3.ttl)",
+     #       data=rdf_content,
+          #  file_name="kg3.ttl",
+          #  mime="text/turtle"
+      #  )
+   # else:
+     #   st.warning("⚠️ Fichier `kg3.ttl` non trouvé. Exécute d'abord `rdf_export.py` ou le pipeline d'alignement KG3.")
+  #  else:
+  #  st.write("Sélectionnez une option dans le menu.")
 # ========== Simulation ==========
 elif menu == "Simulation":
     st.title("🧪 Simulation Cybersécurité (Digital Twin)")
