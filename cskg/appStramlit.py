@@ -229,7 +229,7 @@ elif menu == "CSKG2 – Nessus":
 # ========== CSKG3 – Fusionné ==========
 
 # ======================== BLOC CSKG3 ========================
-if menu_choice == "🔀 CSKG3 – Fusion NVD + Nessus":
+elif menu == "CSKG3 – Fusionné":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
     st.info("Visualisation du graphe résultant de la fusion entre les CVE issues de la NVD et celles issues des scans Nessus, via des relations SAME_AS vers des nœuds CVE_UNIFIED.")
 
