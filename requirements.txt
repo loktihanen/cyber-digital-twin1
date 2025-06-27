@@ -3,7 +3,7 @@ rdflib
 fuzzywuzzy[speedup]
 sentence-transformers
 pykeen
-#torch
+torch
 dgl
 scikit-learn
 matplotlib
