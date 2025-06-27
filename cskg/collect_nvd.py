@@ -67,7 +67,7 @@ def insert_cve_neo4j(item):
     cve_id = item["cve"]["id"]
     description = item["cve"]["descriptions"][0]["value"]
     published = item["cve"].get("published")
-    
+
     cve_node = Node("CVE", name=cve_id, description=description, source="NVD")
     if published:
         cve_node["published"] = published
@@ -91,8 +91,12 @@ def insert_cve_neo4j(item):
         for desc in weakness.get("description", []):
             cwe_id = desc["value"]
             if "CWE" in cwe_id:
-                cwe_node = Node("CWE", name=cwe_id)
-                graph.merge(cwe_node, "CWE", "name")
+                existing_cwe = graph.nodes.match("CWE", name=cwe_id).first()
+                if existing_cwe:
+                    cwe_node = existing_cwe
+                else:
+                    cwe_node = Node("CWE", name=cwe_id)
+                    graph.create(cwe_node)
                 graph.merge(Relationship(cve_node, "ASSOCIATED_WITH", cwe_node))
 
     try:
@@ -108,7 +112,7 @@ def insert_cve_neo4j(item):
                 vendor_node = Node("Vendor", name=parsed["vendor"])
                 product_node = Node("Product", name=parsed["product"])
                 version_node = Node("Version", name=parsed["version"])
-                
+
                 graph.merge(vendor_node, "Vendor", "name")
                 graph.merge(product_node, "Product", "name")
                 graph.merge(version_node, "Version", "name")
