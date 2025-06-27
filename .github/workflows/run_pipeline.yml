@@ -23,9 +23,12 @@ jobs:
       - name: Install PyTorch (CPU)
         run: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Install PyTorch Geometric and dependencies
+      - name: Install PyTorch and PyTorch Geometric dependencies
         run: |
-          pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-$(python -c "import torch; print(torch.__version__)")+cpu.html
+         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+         export TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
+         pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric \
+         -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html
 
       - name: Install other dependencies
         run: pip install -r requirements.txt
