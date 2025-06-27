@@ -6,6 +6,20 @@ from torch import nn
 import pandas as pd
 from torch_geometric.data import Data
 from torch_geometric.nn import RGCNConv
+#cnx
+uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+user = "neo4j"
+password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+
+# Initialisation de la connexion au graphe Neo4j Aura
+graph = Graph(uri, auth=(user, password))
+
+# Test rapide de connexion (optionnel)
+try:
+    info = graph.run("RETURN 1").data()
+    print("Connexion Neo4j réussie :", info)
+except Exception as e:
+    print("Erreur de connexion Neo4j :", e)
 
 # === Chargement des triplets
 triplets_df = pd.read_csv("cskg3_triples.tsv", sep="\t", header=None)
