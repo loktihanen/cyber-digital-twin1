@@ -43,20 +43,20 @@ jobs:
       - name: Run embeddingsRotateRGCN script
         run: python cskg/embeddingsRotateRGCN.py
 
-      #- name: Run KG1 (NVD)
-        #run: python cskg/collect_nvd.py
+      - name: Run KG1 (NVD)
+        run: python cskg/collect_nvd.py
 
-      #- name: Run KG2 (Nessus)
-        #run: python cskg/inject_nessus.py
+      - name: Run KG2 (Nessus)
+        run: python cskg/inject_nessus.py
 
-      #- name: Run Alignment & Fusion
-        #run: python cskg/align_and_merge.py
+      - name: Run Alignment & Fusion
+        run: python cskg/align_and_merge.py
         
-      #- name: Run Ontologie
-       # run: python cskg/ontologie.py
+      - name: Run Ontologie
+        run: python cskg/ontologie.py
        
-      #- name: Run Evaluation
-       # run: python cskg/evaluate_alignment.py
+      - name: Run Evaluation
+        run: python cskg/evaluate_alignment.py
        
       - name: Run cskg3_triples
         run: python cskg/cskg3_triples.py
@@ -76,20 +76,20 @@ jobs:
        
      
 
-      - name: Train Embeddings
+      #- name: Train Embeddings
         #run: python cskg/embeddings_train.py
-        run: python cskg/embeddingsRotateRGCN.py
+      #  run: python cskg/embeddingsRotateRGCN.py
         
       #- name: Run R-GCN Prediction
         #run: python cskg/r_gcn_predict.py
 
-      - name: Generate Visualizations
-        run: python cskg/visualization.py
+      #- name: Generate Visualizations
+      #  run: python cskg/visualization.py
       #- name: Run RotatE Prediction
        # run: python cskg/rotate_predict.py
-      - name: Run load
-        run: python cskg/utils/load_triples.py
-      - name: Visualisation
-        run: python cskg/visualization.py
+     # - name: Run load
+     #   run: python cskg/utils/load_triples.py
+     # - name: Visualisation
+      #  run: python cskg/visualization.py
 
 
