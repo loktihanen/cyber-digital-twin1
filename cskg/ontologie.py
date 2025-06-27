@@ -1,30 +1,44 @@
 # ======================== 1. INSTALLATION ========================
-#!pip install rdflib owlrl kafka-python --quiet
+# Assure-toi d'avoir les bonnes versions
+# !pip install py2neo rdflib owlrl kafka-python networkx matplotlib --quiet
+
+# ======================== 2. IMPORTS ========================
+from py2neo import Graph as NeoGraph
 from rdflib import Graph, Namespace, RDF, RDFS, OWL, Literal
+from owlrl import DeductiveClosure, OWLRL_Semantics
+from rdflib.plugins.sparql import prepareQuery
+from kafka import KafkaProducer
+import json
+import networkx as nx
+import matplotlib.pyplot as plt
+
+# ======================== 3. CONNEXION NEO4J ========================
 
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
 
-# Initialisation de la connexion au graphe Neo4j Aura
-graph = Graph(uri, auth=(user, password))
+# Connexion py2neo correcte : on passe le user/password en paramètre auth (tuple)
+# Le constructeur accepte : Graph(uri, auth=(user, password))
+# Mais l'erreur semble indiquer que ta version de py2neo ne le supporte pas
+# Solution : passer l'URI avec user:password@host ou utiliser la classe Auth
 
-# Test rapide de connexion (optionnel)
+# Variante compatible (avec py2neo >=4):
+neo_graph = NeoGraph(uri, auth=(user, password))
+
 try:
-    info = graph.run("RETURN 1").data()
+    info = neo_graph.run("RETURN 1").data()
     print("Connexion Neo4j réussie :", info)
 except Exception as e:
     print("Erreur de connexion Neo4j :", e)
 
-
-# ======================== 2. ONTOLOGIE CSKG3 ========================
-
+# ======================== 4. CRÉATION ONTOLOGIE RDF ========================
 
 rdf_graph = Graph()
 CYBER = Namespace("http://example.org/cyber#")
 rdf_graph.bind("cyber", CYBER)
 
-# Nouvelles classes
+# Classes
 new_classes = [
     ("AttackPath", CYBER.AttackPath),
     ("SecurityControl", CYBER.SecurityControl),
@@ -32,7 +46,7 @@ new_classes = [
     ("NetworkSegment", CYBER.NetworkSegment)
 ]
 
-# Nouvelles propriétés
+# Propriétés
 new_properties = [
     ("at_risk_of", CYBER.at_risk_of),
     ("needs_patch", CYBER.needs_patch),
@@ -42,12 +56,10 @@ new_properties = [
     ("connected_to", CYBER.connected_to)
 ]
 
-# Ajout des classes
 for label, uri in new_classes:
     rdf_graph.add((uri, RDF.type, OWL.Class))
     rdf_graph.add((uri, RDFS.label, Literal(label)))
 
-# Ajout des relations
 for label, uri in new_properties:
     rdf_graph.add((uri, RDF.type, OWL.ObjectProperty))
     rdf_graph.add((uri, RDFS.label, Literal(label)))
@@ -55,19 +67,17 @@ for label, uri in new_properties:
 rdf_graph.serialize(destination="cskg3_enriched.ttl", format="turtle")
 print("✅ Ontologie enrichie enregistrée dans cskg3_enriched.ttl")
 
-# ======================== 3. RAISONNEMENT OWL ========================
-from owlrl import DeductiveClosure, OWLRL_Semantics
+# ======================== 5. RAISONNEMENT OWL ========================
 
-# Charger l'ontologie
 g = Graph()
 g.parse("cskg3_enriched.ttl", format="turtle")
 
 DeductiveClosure(OWLRL_Semantics).expand(g)
+
 g.serialize(destination="cskg3_inferenced.ttl", format="turtle")
 print("✅ Inférences OWL appliquées et enregistrées dans cskg3_inferenced.ttl")
 
-# ======================== 4. VISUALISATION DES INFÉRENCES ========================
-from rdflib.plugins.sparql import prepareQuery
+# ======================== 6. REQUÊTE SPARQL ========================
 
 query = prepareQuery("""
 PREFIX cyber: <http://example.org/cyber#>
@@ -80,8 +90,7 @@ print("\n🔍 Actifs critiques à risque :")
 for row in g.query(query):
     print(f" - {row.asset.split('#')[-1]} est à risque de {row.cve.split('#')[-1]}")
 
-# ======================== 5. TRIGGER NEO4J ========================
-# A exécuter dans Neo4j Browser :
+# ======================== 7. TRIGGER NEO4J (à exécuter dans Neo4j Browser) ========================
 # CALL apoc.trigger.add('alertCriticalCVE',
 #   "MATCH (h:Host)-[:VULNERABLE_TO]->(c:CVE)
 #    WHERE c.severity = 'CRITICAL'
@@ -89,31 +98,26 @@ for row in g.query(query):
 #    RETURN true",
 #   {phase:'after'})
 
-# ======================== 6. STREAM ALERTES AVEC KAFKA ========================
-from kafka import KafkaProducer
-import json
+# ======================== 8. STREAMING AVEC KAFKA ========================
 
-producer = KafkaProducer(
-    bootstrap_servers='localhost:9092',
-    value_serializer=lambda m: json.dumps(m).encode('utf-8')
-)
+#producer = KafkaProducer(
+    #bootstrap_servers='localhost:9092',
+  #  value_serializer=lambda m: json.dumps(m).encode('utf-8')
+#)
 
-event = {
-    "host": "host-001",
-    "cve": "CVE-2024-12345",
-    "severity": "CRITICAL"
-}
+#event = {
+  #  "host": "host-001",
+  #  "cve": "CVE-2024-12345",
+ #   "severity": "CRITICAL"
+#}
 
-producer.send("cskg-alerts", value=event)
-print("📤 Alerte envoyée à Kafka :", event)
+#producer.send("cskg-alerts", value=event)
+#print("📤 Alerte envoyée à Kafka :", event)
 
-# ======================== 7. SIMULATION CHAÎNE D'ATTAQUE ========================
-import networkx as nx
-import matplotlib.pyplot as plt
+# ======================== 9. SIMULATION CHAÎNE D'ATTAQUE ========================
 
-G = nx.DiGraph()
+G_nx = nx.DiGraph()
 
-# Exemple simplifié de chaîne d’attaque simulée
 attack_chain = [
     ("host-001", "connected_to", "host-002"),
     ("host-002", "connected_to", "host-003"),
@@ -122,27 +126,22 @@ attack_chain = [
 ]
 
 for h, r, t in attack_chain:
-    G.add_edge(h, t, label=r)
+    G_nx.add_edge(h, t, label=r)
 
-# Affichage
-pos = nx.spring_layout(G)
-nx.draw(G, pos, with_labels=True, node_color='lightcoral', edge_color='gray', node_size=2000, font_size=9)
-edge_labels = nx.get_edge_attributes(G, 'label')
-nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+pos = nx.spring_layout(G_nx)
+nx.draw(G_nx, pos, with_labels=True, node_color='lightcoral', edge_color='gray', node_size=2000, font_size=9)
+edge_labels = nx.get_edge_attributes(G_nx, 'label')
+nx.draw_networkx_edge_labels(G_nx, pos, edge_labels=edge_labels)
 plt.title("🔗 Chaîne d'attaque simulée")
 plt.show()
 
-# ======================== 8. VALIDATION ACADÉMIQUE ========================
-# Mesure de l’alignement via ratio des SAME_AS entre CVEs des sources différentes
-from py2neo import Graph as NeoGraph
-
-neo_graph = NeoGraph("neo4j+s://8d5fbce8.databases.neo4j.io", auth=("neo4j", "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"))
+# ======================== 10. VALIDATION ACADÉMIQUE ========================
 
 same_as_count = neo_graph.evaluate("MATCH (:CVE)-[:SAME_AS]->(:CVE) RETURN count(*)")
 total_cves = neo_graph.evaluate("MATCH (c:CVE) RETURN count(c)")
 
 print(f"\n📊 Taux d’alignement SAME_AS : {same_as_count}/{total_cves} = {same_as_count/total_cves:.2%}")
 
-# Nombre d’alertes critiques
 critical_alerts = neo_graph.evaluate("MATCH (h:Host)-[:VULNERABLE_TO]->(c:CVE) WHERE c.severity = 'CRITICAL' RETURN count(*)")
 print(f"🚨 Nombre d’alertes critiques détectées : {critical_alerts}")
+
