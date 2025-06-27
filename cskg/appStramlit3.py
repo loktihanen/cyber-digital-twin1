@@ -646,7 +646,7 @@ st.markdown(
         © 2025 <strong>Hanen Lokti</strong> · 
         📧 <a href="mailto:hanenlokti2020@gmail.com" target="_blank">hanenlokti2020@gmail.com</a> · 
         🔗 <a href="https://www.facebook.com/hanen.lokti" target="_blank">Facebook</a> · 
-        💼 <a href="https://www.linkedin.com/in/hanen-lokti" target="_blank">LinkedIn</a>
+        💼 <a href="https://www.facebook.com/hanen.lakti.1274" target="https://www.linkedin.com/in/hanen-lakti-660689203/">LinkedIn</a>
     </div>
     """,
     unsafe_allow_html=True
