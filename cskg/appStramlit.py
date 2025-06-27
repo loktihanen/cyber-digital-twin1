@@ -228,23 +228,127 @@ elif menu == "CSKG2 – Nessus":
 
 # ========== CSKG3 – Fusionné ==========
 elif menu == "CSKG3 – Fusionné":
-    st.title("🔀 CSKG3 – Graphe Fusionné (NVD + Nessus)")
-    st.info("Représentation du graphe de connaissances fusionné incluant des relations SAME_AS et enrichissements.")
+    import networkx as nx
+    from pyvis.network import Network
+    import tempfile
+    import os
 
-    # Exemple de graphe fusionné simulé
-    G = nx.Graph()
-    G.add_edges_from([
-        ("host-01", "CVE-2024-1234"),
-        ("host-01", "Apache"),
-        ("CVE-2024-1234", "Apache"),
-        ("CVE-2024-1234", "CVE-2024-9999", {"label": "SAME_AS"})
-    ])
-    net = Network(notebook=False, height="450px", width="100%")
-    net.from_nx(G)
-    net.save_graph("cskg3.html")
-    with open("cskg3.html", 'r', encoding='utf-8') as f:
-        html = f.read()
-    st.components.v1.html(html, height=480)
+    st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
+    st.info("Visualisation du graphe résultant de la fusion entre les CVE issues de la NVD et celles issues des scans Nessus, via des relations SAME_AS vers des nœuds CVE_UNIFIED.")
+
+    # === Requête pour le graphe enrichi ===
+    query = """
+    MATCH (a)-[r]->(b)
+    WHERE labels(a)[0] IN ['CVE', 'CVE_UNIFIED', 'Plugin', 'Host', 'Service', 'Patch', 'Severity']
+      AND labels(b)[0] IN ['CVE', 'CVE_UNIFIED', 'Plugin', 'Host', 'Service', 'Patch', 'Severity']
+    RETURN a.name AS source, type(r) AS relation, b.name AS target,
+           labels(a)[0] AS source_type, labels(b)[0] AS target_type
+    LIMIT 500
+    """
+    data = graph.run(query).data()
+
+    # === Construction du graphe NetworkX ===
+    G = nx.DiGraph()
+    color_map = {
+        "CVE": "#ff4d4d",
+        "CVE_UNIFIED": "#ffcc00",
+        "Plugin": "#66ccff",
+        "Host": "#00cc66",
+        "Service": "#ffa500",
+        "Patch": "#aa33ff",
+        "Severity": "#ff9900"
+    }
+
+    skipped = 0
+    for row in data:
+        src = row.get("source")
+        tgt = row.get("target")
+        rel = row.get("relation")
+        src_type = row.get("source_type")
+        tgt_type = row.get("target_type")
+
+        if not src or not tgt or not rel:
+            skipped += 1
+            continue
+
+        G.add_node(src, type=src_type, label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=rel)
+
+    # === Statistiques de fusion
+    nb_unifies = graph.run("""
+        MATCH (cveu:CVE_UNIFIED)-[:SAME_AS]->(:CVE)
+        RETURN count(DISTINCT cveu) AS nb
+    """).evaluate()
+
+    total_fusionnees = graph.run("""
+        MATCH (c:CVE)-[:SAME_AS]-(:CVE)
+        RETURN count(DISTINCT c) AS total
+    """).evaluate()
+
+    same_as_total = graph.run("""
+        MATCH (:CVE)-[r:SAME_AS]-(:CVE)
+        RETURN count(r) AS total
+    """).evaluate()
+
+    # === Visualisation PyVis
+    def draw_pyvis_graph(G):
+        net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
+        for node, data in G.nodes(data=True):
+            node_type = data.get("type", "Unknown")
+            color = color_map.get(node_type, "gray")
+            net.add_node(node, label=data.get("label", node), color=color, title=node_type)
+        for src, tgt, data in G.edges(data=True):
+            net.add_edge(src, tgt, title=data.get("label", ""))
+        tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+        net.save_graph(tmpfile.name)
+        return tmpfile.name
+
+    st.subheader("🌐 Visualisation interactive (PyVis)")
+    with st.spinner("🔄 Génération du graphe..."):
+        html_path = draw_pyvis_graph(G)
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        st.components.v1.html(html, height=700, scrolling=True)
+
+    # === Statistiques générales
+    st.markdown("### 📈 Statistiques du graphe CSKG3")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("🧠 Nœuds visibles", G.number_of_nodes())
+    with col2:
+        st.metric("🔗 Relations visibles", G.number_of_edges())
+    with col3:
+        st.metric("📊 Densité", f"{nx.density(G):.4f}")
+
+    st.caption(f"⚠️ Lignes ignorées (valeurs nulles) : {skipped}")
+
+    # === Statistiques sur la fusion CVE
+    st.markdown("### 🧬 Alignement & Fusion via CVE_UNIFIED")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("🔀 Relations SAME_AS", same_as_total)
+    with col2:
+        st.metric("✅ CVE alignées", total_fusionnees)
+    with col3:
+        st.metric("🧬 Nœuds CVE_UNIFIED", nb_unifies)
+
+    # === RDF export (Turtle)
+    st.markdown("---")
+    st.subheader("📤 RDF fusionné (Turtle)")
+    rdf_file = "kg3.ttl"
+    if os.path.exists(rdf_file):
+        with open(rdf_file, "r", encoding="utf-8") as f:
+            rdf_content = f.read()
+        st.download_button(
+            label="📥 Télécharger RDF (kg3.ttl)",
+            data=rdf_content,
+            file_name="kg3.ttl",
+            mime="text/turtle"
+        )
+    else:
+        st.warning("⚠️ Fichier `kg3.ttl` non trouvé. Exécute d'abord `rdf_export.py` ou le pipeline d'alignement KG3.")
+
 
 # ========== Simulation ==========
 elif menu == "Simulation":
