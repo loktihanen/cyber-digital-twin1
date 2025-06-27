@@ -29,10 +29,13 @@ jobs:
       - name: Run Alignment & Fusion
         run: |
           python cskg/align_and_merge.py
-          python cskg/analyse.py
+ #python cskg/analyse.py
  #python cskg/propagate_impacts.py
  #python cskg/fuse_unified_cves.py
-
+ 
+      - name: Run Analyse
+        run: python cskg/analyse.py
+        
       - name: Train Embeddings
         run: python cskg/embeddings_train.py
 
