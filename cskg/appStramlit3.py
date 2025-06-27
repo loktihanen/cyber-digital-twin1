@@ -514,7 +514,7 @@ elif menu == "Simulation":
             st.dataframe(df_critical.style.background_gradient(cmap="OrRd"), use_container_width=True)
         else:
             st.info("Aucun service vulnérable détecté dans cette simulation.")
-elif menu == "🎯 Recommandation":
+elif menu == "Recommandation":
 
     import streamlit as st
     import pandas as pd
