@@ -126,26 +126,105 @@ if menu == "CSKG1 – NVD":
 
 # ========== CSKG2 – Nessus ==========
 elif menu == "CSKG2 – Nessus":
-    st.title("🛡️ CSKG2 – Analyse Nessus")
-    st.info("Visualisation des vulnérabilités extraites à partir des résultats de scan Nessus.")
-    
-    # Exemple de données Nessus simulées
-    nessus_df = pd.DataFrame({
-        "Host": ["host-01", "host-02"],
-        "Vuln": ["CVE-2023-1000", "CVE-2024-8888"],
-        "Severity": ["Critical", "High"]
-    })
-    st.dataframe(nessus_df)
+    st.header("🧩 CSKG2 – Graphe basé sur les scans Nessus")
+    st.info("Ce module permet d'explorer les vulnérabilités détectées dans ton infrastructure via les résultats Nessus (hosts, plugins, CVE, etc.).")
 
-    # Graphe simple
-    G = nx.Graph()
-    G.add_edges_from([("host-01", "CVE-2023-1000"), ("host-02", "CVE-2024-8888")])
-    net = Network(notebook=False, height="400px", width="100%")
-    net.from_nx(G)
-    net.save_graph("cskg2.html")
-    with open("cskg2.html", 'r', encoding='utf-8') as f:
+    # 🎛️ Filtres
+    st.sidebar.subheader("🎛️ Filtres spécifiques à KG2")
+    selected_entities = st.sidebar.multiselect(
+        "Types d'entités à afficher",
+        ["Host", "Plugin", "CVE", "Service", "Port", "OperatingSystem", "Scanner", "Severity"],
+        default=["Host", "Plugin", "CVE"]
+    )
+    enable_physics = st.sidebar.toggle("Activer l'animation (physique)", value=True)
+
+    # 📥 Chargement des données
+    @st.cache_data
+    def load_kg2_data():
+        query = """
+        MATCH (a)-[r]->(b)
+        WHERE labels(a)[0] IN ['Host', 'Plugin', 'Service', 'Port', 'OperatingSystem', 'Scanner', 'Severity']
+          AND labels(b)[0] IN ['Plugin', 'CVE', 'Port', 'Service', 'OperatingSystem', 'Scanner', 'Severity']
+        RETURN a.name AS source, type(r) AS relation, b.name AS target,
+               labels(a)[0] AS source_type, labels(b)[0] AS target_type
+        """
+        return graph_db.run(query).to_data_frame()
+
+    df = load_kg2_data()
+
+    if df.empty:
+        st.warning("Aucune relation Nessus trouvée dans Neo4j.")
+        st.stop()
+
+    import networkx as nx
+    from pyvis.network import Network
+    import pandas as pd
+
+    st.subheader("🌐 Visualisation interactive (`pyvis`)")
+
+    # 📊 Construction du graphe
+    G = nx.DiGraph()
+    skipped = 0
+    for _, row in df.iterrows():
+        src = row.get("source")
+        tgt = row.get("target")
+        src_type = row.get("source_type")
+        tgt_type = row.get("target_type")
+
+        if not src or not tgt or pd.isna(src) or pd.isna(tgt):
+            skipped += 1
+            continue
+
+        # n'affiche que si au moins un des deux nœuds est sélectionné
+        if src_type not in selected_entities and tgt_type not in selected_entities:
+            continue
+
+        G.add_node(src, type=src_type, label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=row["relation"])
+
+    # 🎨 Couleurs selon type
+    color_map = {
+        "Host": "#00cc66",
+        "Plugin": "#66ccff",
+        "CVE": "#ff4d4d",
+        "Service": "#ffaa00",
+        "Port": "#9966cc",
+        "OperatingSystem": "#cccccc",
+        "Scanner": "#00b8d9",
+        "Severity": "#ff9900"
+    }
+
+    # 🌐 Visualisation PyVis
+    net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white")
+
+    if enable_physics:
+        net.barnes_hut()
+    else:
+        net.set_options('''var options = { "physics": { "enabled": false } }''')
+
+    for node, data in G.nodes(data=True):
+        net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"), title=data["type"])
+    for src, tgt, data in G.edges(data=True):
+        net.add_edge(src, tgt, title=data.get("label", ""))
+
+    # 📤 Affichage HTML
+    path = "/tmp/kg2_nessus.html"
+    net.save_graph(path)
+    with open(path, 'r', encoding='utf-8') as f:
         html = f.read()
-    st.components.v1.html(html, height=450)
+    st.components.v1.html(html, height=700, scrolling=True)
+
+    # 📈 Statistiques
+    st.markdown("### 📊 Statistiques du graphe")
+    st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
+    st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
+    st.markdown(f"- **Densité** : {nx.density(G):.4f}")
+    st.markdown(f"- **Lignes ignorées** : {skipped}")
+
+    # 📄 Table des relations
+    st.markdown("### 📄 Relations extraites")
+    st.dataframe(df, use_container_width=True)
 
 # ========== CSKG3 – Fusionné ==========
 elif menu == "CSKG3 – Fusionné":
