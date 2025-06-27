@@ -341,7 +341,7 @@ elif menu == "Simulation":
     from rdflib.plugins.sparql import prepareQuery
 
     st.header("🧪 Simulation basée sur le Jumeau Numérique")
-    st.info("Ce module regroupe raisonnement OWL, analyse de risques, simulation What-If et visualisation.")
+    st.info("Ce module regroupe raisonnement OWL, analyse de risques, simulation What-If et visualisation interactive.")
 
     # ======================== 1. 🔄 Extraction Neo4j ========================
     uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
@@ -358,47 +358,63 @@ elif menu == "Simulation":
     df_impacts = graph.run(query).to_data_frame()
 
     # ======================== 2. 🧠 Raisonnement OWL ========================
+    uploaded_file = st.file_uploader("📂 Uploader le fichier OWL enrichi (`cskg3_enriched.ttl`)", type="ttl")
     rdf_graph = RDFGraph()
     CYBER = Namespace("http://example.org/cyber#")
     rdf_graph.bind("cyber", CYBER)
 
-    try:
-        rdf_graph.parse("cskg3_enriched.ttl", format="turtle")
-        DeductiveClosure(OWLRL_Semantics).expand(rdf_graph)
-        rdf_graph.serialize("cskg3_inferenced.ttl", format="turtle")
-        st.success("✅ Raisonnement OWL appliqué.")
-    except Exception as e:
-        st.error(f"Erreur lors de l’inférence OWL : {e}")
+    if uploaded_file:
+        try:
+            rdf_graph.parse(uploaded_file, format="turtle")
+            DeductiveClosure(OWLRL_Semantics).expand(rdf_graph)
+            rdf_graph.serialize("cskg3_inferenced.ttl", format="turtle")
+            st.success("✅ Raisonnement OWL appliqué avec succès.")
+        except Exception as e:
+            st.error(f"Erreur lors de l’inférence OWL : {e}")
+    else:
+        st.warning("Veuillez uploader le fichier `cskg3_enriched.ttl` pour activer le raisonnement OWL.")
 
     # ======================== 3. 🔍 SPARQL: actifs à risque ========================
-    query_sparql = prepareQuery("""
-    PREFIX cyber: <http://example.org/cyber#>
-    SELECT ?asset ?cve WHERE {
-      ?asset cyber:at_risk_of ?cve .
-    }
-    """)
-    risks = [(row.asset.split("#")[-1], row.cve.split("#")[-1]) for row in rdf_graph.query(query_sparql)]
-    df_risks = pd.DataFrame(risks, columns=["Asset", "CVE"])
+    try:
+        query_sparql = prepareQuery("""
+        PREFIX cyber: <http://example.org/cyber#>
+        SELECT ?asset ?cve WHERE {
+          ?asset cyber:at_risk_of ?cve .
+        }
+        """)
+        risks = [(row.asset.split("#")[-1], row.cve.split("#")[-1]) for row in rdf_graph.query(query_sparql)]
+        df_risks = pd.DataFrame(risks, columns=["Asset", "CVE"])
 
-    if not df_risks.empty:
-        st.subheader("🔍 Actifs à risque détectés par inférence")
-        st.dataframe(df_risks, use_container_width=True)
-    else:
-        st.info("Aucun actif à risque détecté par inférence OWL.")
+        if not df_risks.empty:
+            st.subheader("🔍 Actifs à risque détectés par inférence")
+            st.dataframe(df_risks, use_container_width=True)
+        else:
+            st.info("Aucun actif à risque détecté par inférence OWL.")
+    except Exception as e:
+        st.error(f"Erreur SPARQL ou inférence non disponible : {e}")
 
     # ======================== 4. 🌐 Vue interactive PyVis ========================
     st.subheader("🌐 Visualisation interactive Host → Service")
     G_nx = nx.DiGraph()
     for _, row in df_impacts.iterrows():
-        G_nx.add_node(row['host'], label=row['host'], color="#00cc66", type="Host")
-        G_nx.add_node(row['service'], label=row['service'], color="#ffaa00", type="Service")
-        G_nx.add_edge(row['host'], row['service'], weight=row['weight'])
+        host = row['host']
+        service = row['service']
+        weight = row['weight'] if pd.notnull(row['weight']) else 1.0
+        try:
+            weight = float(weight)
+        except:
+            weight = 1.0
 
-    net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white")
+        G_nx.add_node(host, label=host, color="#00cc66", type="Host")
+        G_nx.add_node(service, label=service, color="#ffaa00", type="Service")
+        G_nx.add_edge(host, service, weight=weight)
+
+    net = Network(height="700px", width="100%", bgcolor="#1e1e1e", font_color="white", directed=True)
     for node, data in G_nx.nodes(data=True):
-        net.add_node(node, label=data['label'], color=data['color'], title=data['type'])
+        net.add_node(node, label=data.get("label", node), color=data.get("color", "gray"), title=data.get("type", ""))
     for u, v, data in G_nx.edges(data=True):
-        net.add_edge(u, v, value=data['weight'], title=f"Poids : {data['weight']:.2f}")
+        w = data.get("weight", 1.0)
+        net.add_edge(u, v, value=w, title=f"Poids : {w:.2f}")
 
     tmpfile = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
     net.save_graph(tmpfile.name)
@@ -430,9 +446,9 @@ elif menu == "Simulation":
                 break
         return dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
 
-    if st.button("Lancer la simulation"):
+    if st.button("🚀 Lancer la simulation"):
         results = simulate_propagation(G_nx, selected_host, decay, max_depth)
-        st.success(f"Propagation depuis {selected_host} effectuée.")
+        st.success(f"Propagation depuis {selected_host} effectuée avec {len(results)} nœuds affectés.")
 
         # ======================== 7. 📊 Analyse & heatmap ========================
         st.subheader("📊 Heatmap des services impactés")
@@ -467,18 +483,6 @@ elif menu == "Simulation":
     nx.draw_networkx_edge_labels(G_attack, pos, edge_labels=edge_labels)
     st.pyplot(plt.gcf())
     plt.clf()
-
-# ========== Recommandation ==========
-elif menu == "Recommandation":
-    st.title("🎯 Système de Recommandation")
-    st.info("Recommandation d’actions correctives basées sur le graphe.")
-    
-    # Exemple de recommandation simple
-    recs = {
-        "host-01": "Mettre à jour Apache vers la version 2.4.58",
-        "host-02": "Désactiver SSLv3"
-    }
-    st.json(recs)
 
 # ========== Heatmap ==========
 elif menu == "Heatmap":
