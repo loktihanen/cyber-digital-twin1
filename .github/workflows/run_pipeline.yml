@@ -31,7 +31,8 @@ jobs:
         
       - name: Run Ontologie
         run: python cskg/ontologie.py
-
+      #- name: Run Evaluation
+       # run: python cskg/evaluate_alignment.py
         
  #python cskg/analyse.py
  #python cskg/propagate_impacts.py
@@ -46,8 +47,6 @@ jobs:
       #- name: Run Analyse
        # run: python cskg/Cskg3OntologyPipeline.py
        
-      - name: Run Evaluation
-        run: python cskg/evaluate_alignment.py
       - name: Run cskg3_triples
         run: python cskg/cskg3_triples.py        
 
