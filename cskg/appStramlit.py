@@ -37,98 +37,92 @@ menu = st.sidebar.radio("📌 Menu", [
 ])
 
 # ========== CSKG1 – NVD ==========
-if menu == "CSKG1 – NVD":
-    from py2neo import Graph
+if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
+    import networkx as nx
     from pyvis.network import Network
     import pandas as pd
     import tempfile
     import os
 
-    st.title("🧠 CSKG1 – Graphe de connaissances NVD")
-    st.info("Visualisation interactive du graphe extrait automatiquement depuis la NVD via l'API officielle et enrichi dans Neo4j.")
+    st.header("📌 CSKG1 – Graphe basé sur la NVD")
+    st.info("Ce module affiche les vulnérabilités extraites depuis la National Vulnerability Database (CVE, CWE, CPE).")
 
-    # Connexion à Neo4j
-    uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
-    user = "neo4j"
-    password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-    graph = Graph(uri, auth=(user, password))
+    # 🎛️ Filtres dynamiques
+    st.sidebar.subheader("🎛️ Filtres spécifiques à KG1")
+    min_cvss = st.sidebar.slider("Score CVSS minimum", 0.0, 10.0, 0.0)
+    selected_entities = st.sidebar.multiselect("Entités à afficher", ["CVE", "CWE", "CPE", "Entity"], default=["CVE", "CWE", "CPE"])
 
-    # Récupération des triplets NVD
-    query = """
-    MATCH (h)-[r]->(t)
-    WHERE h.name IS NOT NULL AND t.name IS NOT NULL
-    RETURN h.name AS head, type(r) AS relation, t.name AS tail, labels(h)[0] AS head_type, labels(t)[0] AS tail_type
-    LIMIT 2000
-    """
-    results = graph.run(query).data()
-    df = pd.DataFrame(results)
+    @st.cache_data
+    def load_kg1_data(min_cvss):
+        query = f"""
+        MATCH (c:CVE)-[r]->(x)
+        WHERE c.cvss_score >= {min_cvss}
+        RETURN c.name AS source, type(r) AS relation, x.name AS target, labels(x)[0] AS target_type
+        """
+        return graph_db.run(query).to_data_frame()
+
+    df = load_kg1_data(min_cvss)
 
     if df.empty:
-        st.warning("⚠️ Aucun triplet trouvé dans Neo4j. Exécute le pipeline KG1 pour alimenter la base.")
-    else:
-        st.success(f"✅ {len(df)} triplets extraits de Neo4j pour le graphe NVD.")
+        st.warning("⚠️ Aucune relation NVD trouvée pour les filtres donnés.")
+        st.stop()
 
-        # === Statistiques par type ===
-        cve_count = graph.run("MATCH (n:CVE) RETURN count(n) AS count").evaluate()
-        cpe_count = graph.run("MATCH (n:CPE) RETURN count(n) AS count").evaluate()
-        cwe_count = graph.run("MATCH (n:CWE) RETURN count(n) AS count").evaluate()
-        capec_count = graph.run("MATCH (n:CAPEC) RETURN count(n) AS count").evaluate()
+    # Filtres supplémentaires
+    relations_list = df["relation"].unique().tolist()
+    selected_relations = st.sidebar.multiselect("Relations à afficher", relations_list, default=relations_list)
+    df = df[df["relation"].isin(selected_relations)]
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("🛑 CVE", cve_count)
-        col2.metric("🧩 CPE", cpe_count)
-        col3.metric("📦 CWE", cwe_count)
-        col4.metric("🎯 CAPEC", capec_count)
+    # 🌐 Construction du graphe
+    G = nx.DiGraph()
+    skipped_rows = 0
 
-        # === Statistiques structurelles ===
-        num_nodes = len(set(df["head"].tolist() + df["tail"].tolist()))
-        num_edges = len(df)
-        max_possible_edges = num_nodes * (num_nodes - 1)
-        density = round(num_edges / max_possible_edges, 4) if max_possible_edges > 0 else 0.0
+    for _, row in df.iterrows():
+        src = row.get("source")
+        tgt = row.get("target")
+        tgt_type = row.get("target_type")
 
-        st.subheader("📐 Statistiques structurelles du graphe")
-        st.write(f"🔢 Nombre total de nœuds distincts : `{num_nodes}`")
-        st.write(f"🔁 Nombre total de relations (arêtes) : `{num_edges}`")
-        st.write(f"📊 Densité approximative du graphe : `{density}`")
+        if not src or not tgt or pd.isna(src) or pd.isna(tgt):
+            skipped_rows += 1
+            continue
+        if tgt_type not in selected_entities:
+            continue
 
-        # === Visualisation Pyvis ===
-        G = Network(height="600px", width="100%", bgcolor="#222222", font_color="white", notebook=False)
-        node_colors = {
-            "CVE": "red",
-            "CPE": "orange",
-            "CWE": "green",
-            "CAPEC": "purple",
-            "Vendor": "blue",
-            "Product": "yellow",
-            "Version": "lightblue",
-            "Entity": "gray"
-        }
+        G.add_node(src, type="CVE", label=src)
+        G.add_node(tgt, type=tgt_type, label=tgt)
+        G.add_edge(src, tgt, label=row["relation"])
 
-        added_nodes = set()
+    # 🎨 Pyvis pour visualisation interactive
+    st.subheader("🌐 Visualisation interactive (`pyvis`)")
+    color_map = {
+        "CVE": "#ff4d4d", "CWE": "#ffa500", "CPE": "#6699cc", "Entity": "#dddd00"
+    }
 
-        for _, row in df.iterrows():
-            h, r, t = row["head"], row["relation"], row["tail"]
-            h_type = row["head_type"]
-            t_type = row["tail_type"]
+    net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
+    for node, data in G.nodes(data=True):
+        net.add_node(node, label=data["label"], color=color_map.get(data["type"], "gray"))
+    for src, tgt, data in G.edges(data=True):
+        net.add_edge(src, tgt, title=data.get("label", ""))
 
-            if h not in added_nodes:
-                G.add_node(h, label=h, color=node_colors.get(h_type, "white"), title=h_type)
-                added_nodes.add(h)
-            if t not in added_nodes:
-                G.add_node(t, label=t, color=node_colors.get(t_type, "white"), title=t_type)
-                added_nodes.add(t)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
+        net.save_graph(tmp_file.name)
+        html = open(tmp_file.name, 'r', encoding='utf-8').read()
+        st.components.v1.html(html, height=700, scrolling=True)
 
-            G.add_edge(h, t, label=r)
+    # 📊 Statistiques
+    st.markdown("### 📊 Statistiques du graphe")
+    st.markdown(f"- **Nœuds** : {G.number_of_nodes()}")
+    st.markdown(f"- **Arêtes** : {G.number_of_edges()}")
+    st.markdown(f"- **Densité** : {nx.density(G):.4f}")
+    st.markdown(f"- **Lignes ignorées** : {skipped_rows}")
 
-        # Sauvegarde temporaire et affichage
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp_file:
-            G.save_graph(tmp_file.name)
-            html_content = open(tmp_file.name, 'r', encoding='utf-8').read()
-            st.components.v1.html(html_content, height=600, scrolling=True)
+    # 📥 Export GML
+    nx.write_gml(G, "/tmp/kg1_filtered.gml")
+    with open("/tmp/kg1_filtered.gml", "rb") as f:
+        st.download_button("📥 Télécharger le graphe (GML)", f, file_name="kg1_nvd.gml")
 
-        # Aperçu tabulaire
-        with st.expander("🔍 Aperçu des relations (triplets)"):
-            st.dataframe(df[["head", "relation", "tail"]])
+    # 📄 Table des relations
+    st.markdown("### 📄 Relations extraites")
+    st.dataframe(df, use_container_width=True)
 
 # ========== CSKG2 – Nessus ==========
 elif menu == "CSKG2 – Nessus":
