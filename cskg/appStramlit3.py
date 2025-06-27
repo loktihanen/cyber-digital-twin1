@@ -637,22 +637,21 @@ elif menu == "Recommandation":
 
     csv_data = df.to_csv(index=False).encode("utf-8")
     st.download_button("⬇️ Télécharger les recommandations CSV", data=csv_data, file_name="recommandations_cyber.csv", mime="text/csv")
-def footer():
-    st.markdown("---")
-    st.markdown(
-        """
-        <div style='text-align: center; font-size: 16px; padding-top: 20px;'>
-            © 2025 <strong>Hanen Lokti</strong> · 
-            📧 <a href="mailto:hanenlokti2020@gmail.com" target="_blank">hanenlokti2020@gmail.com</a> · 
-            🔗 <a href="https://www.facebook.com/hanen.lokti" target="_blank">Facebook</a> · 
-            💼 <a href="https://www.linkedin.com/in/hanen-lokti" target="_blank">LinkedIn</a>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    
+st.markdown("---")
 
-# puis à la fin de l’app :
-footer()
+st.markdown(
+    """
+    <div style='text-align: center; font-size: 16px; padding-top: 20px;'>
+        © 2025 <strong>Hanen Lokti</strong> · 
+        📧 <a href="mailto:hanenlokti2020@gmail.com" target="_blank">hanenlokti2020@gmail.com</a> · 
+        🔗 <a href="https://www.facebook.com/hanen.lokti" target="_blank">Facebook</a> · 
+        💼 <a href="https://www.linkedin.com/in/hanen-lokti" target="_blank">LinkedIn</a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # ========== Heatmap ==========
 #elif menu == "Heatmap":
