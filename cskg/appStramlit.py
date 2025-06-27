@@ -337,7 +337,7 @@ elif menu == "CSKG3 – Fusionné":
         )
     else:
         st.warning("⚠️ Fichier `kg3.ttl` non trouvé. Exécute d'abord `rdf_export.py` ou le pipeline d'alignement KG3.")
-else:
+  else:
     st.write("Sélectionnez une option dans le menu.")
 # ========== Simulation ==========
 elif menu == "Simulation":
