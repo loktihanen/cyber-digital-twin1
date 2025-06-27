@@ -650,6 +650,43 @@ elif menu == "Recommandation":
   #  df = pd.DataFrame(data, index=hosts, columns=vulns)
 
     # Affichage heatmap
-    fig, ax = plt.subplots(figsize=(8, 4))
-    sns.heatmap(df, annot=True, cmap="Reds", cbar=True)
-    st.pyplot(fig)
+    #fig, ax = plt.subplots(figsize=(8, 4))
+   # sns.heatmap(df, annot=True, cmap="Reds", cbar=True)
+    #st.pyplot(fig)
+st.markdown(
+    """
+    <style>
+    .footer {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #1e1e1e;
+        color: white;
+        text-align: right;
+        padding: 10px 30px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 14px;
+        box-shadow: 0 -2px 5px rgba(0,0,0,0.3);
+        z-index: 9999;
+    }
+    .footer a {
+        color: #1DA1F2;
+        margin-left: 15px;
+        text-decoration: none;
+        font-weight: bold;
+        transition: color 0.3s ease;
+    }
+    .footer a:hover {
+        color: #0d8ddb;
+        text-decoration: underline;
+    }
+    </style>
+
+    <div class="footer">
+        🌐 Retrouvez-moi sur 
+        <a href="https://www.facebook.com/hanen.lakti.1274" target="_blank">Facebook</a> | 
+        <a href="https://www.linkedin.com/in/hanen-lakti-660689203/" target="_blank">LinkedIn</a>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
