@@ -35,7 +35,10 @@ jobs:
  
       - name: Run Analyse
         run: python cskg/analyse.py
-        
+         
+      - name: Run Analyse
+        run: python cskg/Cskg3OntologyPipeline.py
+
       - name: Train Embeddings
         run: python cskg/embeddings_train.py
 
