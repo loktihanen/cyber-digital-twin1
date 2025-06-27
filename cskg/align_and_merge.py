@@ -64,7 +64,7 @@ for label, uri in relations:
     rdf_graph.add((uri, RDFS.label, Literal(label)))
 
 rdf_graph.serialize(destination="kg3.ttl", format="turtle")
-print("\u2705 Ontologie RDF KG3 exportée : kg3.ttl")
+print("✅ Ontologie RDF KG3 exportée : kg3.ttl")
 
 # ======================== 4. ALIGNEMENT CVE KG1 ↔ KG2 ========================
 model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -108,7 +108,7 @@ def align_cve_nodes():
                 graph.merge(Relationship(nessus_cve, "SAME_AS", best_match))
                 count_embed += 1
 
-    print(f"\u2705 Alignement : {count_exact} exacts, {count_fuzzy} fuzzy, {count_embed} embeddings.")
+    print(f"✅ Alignement : {count_exact} exacts, {count_fuzzy} fuzzy, {count_embed} embeddings.")
 
 # ======================== 5. FUSION DES CVE ALIGNEES ========================
 def fuse_cve_same_as():
@@ -137,7 +137,7 @@ def fuse_cve_same_as():
             if node:
                 graph.merge(Relationship(unified_node, "SAME_AS", node))
 
-    print(f"\u2705 Fusion {len(matched)} paires alignées dans CVE_UNIFIED")
+    print(f"✅ Fusion {len(matched)} paires alignées dans CVE_UNIFIED")
 
 # ======================== 6. ENRICHISSEMENTS SUPPLÉMENTAIRES ========================
 def create_network_links():
@@ -147,7 +147,7 @@ def create_network_links():
     MERGE (h1)-[:COMMUNICATES_WITH]->(h2)
     """
     graph.run(query)
-    print("\u2705 COMMUNICATES_WITH ajoutées.")
+    print("✅ COMMUNICATES_WITH ajoutées.")
 
 def recommend_patches():
     query = """
@@ -158,18 +158,31 @@ def recommend_patches():
     MERGE (c)-[:MITIGATED_BY]->(p)
     """
     graph.run(query)
-    print("\u2705 RECOMMENDED_ACTION et MITIGATED_BY ajoutées.")
+    print("✅ RECOMMENDED_ACTION et MITIGATED_BY ajoutées.")
+
+def debug_invalid_hosts():
+    query = """
+    MATCH (h:Host)
+    WHERE size(split(h.name, '.')) < 3 OR h.name IS NULL
+    RETURN h.name AS invalid_host
+    """
+    bad_hosts = graph.run(query).data()
+    if bad_hosts:
+        print("⚠️ Hosts ignorés pour segmentation réseau :")
+        for row in bad_hosts:
+            print("-", row["invalid_host"])
 
 def add_network_segments():
     query = """
     MATCH (h:Host)
     WITH h, split(h.name, '.') AS parts
+    WHERE size(parts) >= 3 AND h.name =~ '\\d+\\.\\d+\\.\\d+\\.\\d+'
     WITH h, parts[0] + '.' + parts[1] + '.' + parts[2] + '.0/24' AS subnet
     MERGE (s:Network_Segment {name: subnet})
     MERGE (h)-[:BELONGS_TO]->(s)
     """
     graph.run(query)
-    print("\u2705 Network_Segment ajoutées.")
+    print("✅ Network_Segment ajoutées.")
 
 # ======================== 7. EXECUTION ========================
 if __name__ == "__main__":
@@ -177,4 +190,6 @@ if __name__ == "__main__":
     fuse_cve_same_as()
     create_network_links()
     recommend_patches()
+    debug_invalid_hosts()
     add_network_segments()
+
