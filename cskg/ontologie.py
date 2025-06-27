@@ -1,5 +1,7 @@
 # ======================== 1. INSTALLATION ========================
 #!pip install rdflib owlrl kafka-python --quiet
+from rdflib import Graph, Namespace, RDF, RDFS, OWL, Literal
+
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
@@ -16,7 +18,7 @@ except Exception as e:
 
 
 # ======================== 2. ONTOLOGIE CSKG3 ========================
-from rdflib import Graph, Namespace, RDF, RDFS, OWL, Literal
+
 
 rdf_graph = Graph()
 CYBER = Namespace("http://example.org/cyber#")
