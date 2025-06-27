@@ -36,7 +36,7 @@ menu = st.sidebar.radio("📌 Menu", [
     "Heatmap"
 ])
 
-# ========== CSKG1 – NVD ==========
+# ========== CSKG1 – NVD =========
 if menu_choice == "📌 CSKG1 – NVD (vulnérabilités publiques)":
     import networkx as nx
     from pyvis.network import Network
