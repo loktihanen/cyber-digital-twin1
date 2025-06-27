@@ -2,8 +2,10 @@ name: Run Cyber Digital Twin Pipeline
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ main ]         # Pour déclencher à chaque mise à jour de code
+  workflow_dispatch:           # Pour lancer manuellement si besoin
+  schedule:
+    - cron: '0 3 * * *'        # Exécution automatique tous les jours à 4h heure tunisienne (3h UTC)
 
 jobs:
   build:
