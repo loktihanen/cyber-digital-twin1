@@ -16,8 +16,8 @@ numpy
 
 streamlit
 seaborn
-
-
+owlrl 
+kafka-python 
 
 
 
