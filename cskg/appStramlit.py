@@ -233,7 +233,6 @@ elif menu == "CSKG3 – Fusionné":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
     st.info("Visualisation du graphe résultant de la fusion entre les CVE issues de la NVD et celles issues des scans Nessus, via des relations SAME_AS vers des nœuds CVE_UNIFIED.")
 
-    # === Requête pour le graphe enrichi ===
     query = """
     MATCH (a)-[r]->(b)
     WHERE labels(a)[0] IN ['CVE', 'CVE_UNIFIED', 'Plugin', 'Host', 'Service', 'Patch', 'Severity']
@@ -244,7 +243,6 @@ elif menu == "CSKG3 – Fusionné":
     """
     data = graph_db.run(query).data()
 
-    # === Construction du graphe NetworkX ===
     G = nx.DiGraph()
     color_map = {
         "CVE": "#ff4d4d",
@@ -272,7 +270,6 @@ elif menu == "CSKG3 – Fusionné":
         G.add_node(tgt, type=tgt_type, label=tgt)
         G.add_edge(src, tgt, label=rel)
 
-    # === Statistiques de fusion
     nb_unifies = graph_db.run("""
         MATCH (cveu:CVE_UNIFIED)-[:SAME_AS]->(:CVE)
         RETURN count(DISTINCT cveu) AS nb
@@ -288,7 +285,6 @@ elif menu == "CSKG3 – Fusionné":
         RETURN count(r) AS total
     """).evaluate()
 
-    # === Visualisation PyVis
     def draw_pyvis_graph(G):
         net = Network(height="700px", width="100%", bgcolor="#222222", font_color="white")
         for node, data in G.nodes(data=True):
@@ -308,7 +304,6 @@ elif menu == "CSKG3 – Fusionné":
             html = f.read()
         st.components.v1.html(html, height=700, scrolling=True)
 
-    # === Statistiques générales
     st.markdown("### 📈 Statistiques du graphe CSKG3")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -320,7 +315,6 @@ elif menu == "CSKG3 – Fusionné":
 
     st.caption(f"⚠️ Lignes ignorées (valeurs nulles) : {skipped}")
 
-    # === Statistiques sur la fusion CVE
     st.markdown("### 🧬 Alignement & Fusion via CVE_UNIFIED")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -330,7 +324,6 @@ elif menu == "CSKG3 – Fusionné":
     with col3:
         st.metric("🧬 Nœuds CVE_UNIFIED", nb_unifies)
 
-    # === RDF export (Turtle)
     st.markdown("---")
     st.subheader("📤 RDF fusionné (Turtle)")
     rdf_file = "kg3.ttl"
@@ -345,7 +338,8 @@ elif menu == "CSKG3 – Fusionné":
         )
     else:
         st.warning("⚠️ Fichier `kg3.ttl` non trouvé. Exécute d'abord `rdf_export.py` ou le pipeline d'alignement KG3.")
-
+else:
+    st.write("Sélectionnez une option dans le menu.")
 # ========== Simulation ==========
 elif menu == "Simulation":
     st.title("🧪 Simulation Cybersécurité (Digital Twin)")
