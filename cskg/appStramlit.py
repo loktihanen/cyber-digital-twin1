@@ -1,3 +1,5 @@
+
+
 # app.py
 import streamlit as st
 import pandas as pd
@@ -225,10 +227,7 @@ elif menu == "CSKG2 – Nessus":
     # 📄 Table des relations
     st.markdown("### 📄 Relations extraites")
     st.dataframe(df, use_container_width=True)
-
 # ========== CSKG3 – Fusionné ==========
-
-# ======================== BLOC CSKG3 ========================
 elif menu == "CSKG3 – Fusionné":
     st.header("🔀 CSKG3 – Graphe fusionné & enrichi")
     st.info("Visualisation du graphe résultant de la fusion entre les CVE issues de la NVD et celles issues des scans Nessus, via des relations SAME_AS vers des nœuds CVE_UNIFIED.")
