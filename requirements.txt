@@ -19,6 +19,9 @@ seaborn
 owlrl 
 kafka-python 
 
+nvdlib
+pyattck
+transformers
 
 
 
