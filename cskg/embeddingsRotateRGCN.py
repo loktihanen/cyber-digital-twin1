@@ -26,7 +26,7 @@ except Exception as e:
 
 
 # --- 1. Chargement des triplets
-triplets_df = pd.read_csv("cskg/cskg3_triples.tsv", sep="\t", header=None)
+triplets_df = pd.read_csv("cskg/cskg3_triples.py", sep="\t", header=None)
 triplets_df.columns = ["head", "relation", "tail"]
 
 entities = pd.Series(pd.concat([triplets_df["head"], triplets_df["tail"]]).unique()).reset_index()
