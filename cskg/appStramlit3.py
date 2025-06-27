@@ -639,15 +639,15 @@ elif menu == "Recommandation":
     st.download_button("⬇️ Télécharger les recommandations CSV", data=csv_data, file_name="recommandations_cyber.csv", mime="text/csv")
 
 # ========== Heatmap ==========
-elif menu == "Heatmap":
-    st.title("🔥 Heatmap des Vulnérabilités")
-    st.info("Carte de chaleur représentant l’intensité des vulnérabilités par hôte.")
+#elif menu == "Heatmap":
+ #   st.title("🔥 Heatmap des Vulnérabilités")
+ #   st.info("Carte de chaleur représentant l’intensité des vulnérabilités par hôte.")
 
     # Données simulées
-    data = np.random.rand(5, 5)
-    hosts = [f"host-{i}" for i in range(1, 6)]
-    vulns = [f"CVE-{2024+i}-000{i}" for i in range(5)]
-    df = pd.DataFrame(data, index=hosts, columns=vulns)
+  #  data = np.random.rand(5, 5)
+  #  hosts = [f"host-{i}" for i in range(1, 6)]
+  #  vulns = [f"CVE-{2024+i}-000{i}" for i in range(5)]
+  #  df = pd.DataFrame(data, index=hosts, columns=vulns)
 
     # Affichage heatmap
     fig, ax = plt.subplots(figsize=(8, 4))
