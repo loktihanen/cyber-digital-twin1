@@ -14,6 +14,7 @@ try:
 except Exception as e:
     print("Erreur de connexion Neo4j :", e)
 
+
 # ======================== 2. ONTOLOGIE CSKG3 ========================
 from rdflib import Graph, Namespace, RDF, RDFS, OWL, Literal
 
@@ -103,3 +104,43 @@ event = {
 
 producer.send("cskg-alerts", value=event)
 print("📤 Alerte envoyée à Kafka :", event)
+
+# ======================== 7. SIMULATION CHAÎNE D'ATTAQUE ========================
+import networkx as nx
+import matplotlib.pyplot as plt
+
+G = nx.DiGraph()
+
+# Exemple simplifié de chaîne d’attaque simulée
+attack_chain = [
+    ("host-001", "connected_to", "host-002"),
+    ("host-002", "connected_to", "host-003"),
+    ("host-003", "at_risk_of", "CVE-2024-99999"),
+    ("CVE-2024-99999", "targets", "CriticalAsset-01")
+]
+
+for h, r, t in attack_chain:
+    G.add_edge(h, t, label=r)
+
+# Affichage
+pos = nx.spring_layout(G)
+nx.draw(G, pos, with_labels=True, node_color='lightcoral', edge_color='gray', node_size=2000, font_size=9)
+edge_labels = nx.get_edge_attributes(G, 'label')
+nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+plt.title("🔗 Chaîne d'attaque simulée")
+plt.show()
+
+# ======================== 8. VALIDATION ACADÉMIQUE ========================
+# Mesure de l’alignement via ratio des SAME_AS entre CVEs des sources différentes
+from py2neo import Graph as NeoGraph
+
+neo_graph = NeoGraph("neo4j+s://8d5fbce8.databases.neo4j.io", auth=("neo4j", "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"))
+
+same_as_count = neo_graph.evaluate("MATCH (:CVE)-[:SAME_AS]->(:CVE) RETURN count(*)")
+total_cves = neo_graph.evaluate("MATCH (c:CVE) RETURN count(c)")
+
+print(f"\n📊 Taux d’alignement SAME_AS : {same_as_count}/{total_cves} = {same_as_count/total_cves:.2%}")
+
+# Nombre d’alertes critiques
+critical_alerts = neo_graph.evaluate("MATCH (h:Host)-[:VULNERABLE_TO]->(c:CVE) WHERE c.severity = 'CRITICAL' RETURN count(*)")
+print(f"🚨 Nombre d’alertes critiques détectées : {critical_alerts}")
