@@ -2,30 +2,22 @@
 from py2neo import Graph, Node, Relationship
 from transformers import pipeline
 from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal
+from urllib.parse import unquote
 import requests
 import time
 import os
 
-# ======================== 2. CONNEXION NEO4J ======================
-# Connexion Neo4j Aura Free avec paramètres codés en dur
-
-from py2neo import Graph
-
+# ======================== 2. CONNEXION NEO4J ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-
-# Initialisation de la connexion au graphe Neo4j Aura
 graph = Graph(uri, auth=(user, password))
 
-# Test rapide de connexion (optionnel)
 try:
     info = graph.run("RETURN 1").data()
     print("Connexion Neo4j réussie :", info)
 except Exception as e:
     print("Erreur de connexion Neo4j :", e)
-
-
 
 # ======================== 3. ONTOLOGIE RDF ========================
 rdf_graph = RDFGraph()
@@ -39,7 +31,8 @@ rdf_graph.bind("cyber", CYBER)
 
 classes = [
     ("CVE", STUCO.Vulnerability), ("CWE", STUCO.Weakness), ("CPE", STUCO.Platform),
-    ("Entity", CYBER.Entity)
+    ("Entity", CYBER.Entity), ("CAPEC", CYBER.CAPEC), ("Vendor", CYBER.Vendor),
+    ("Product", CYBER.Product), ("Version", CYBER.Version), ("Patch", CYBER.Patch)
 ]
 for label, uri in classes:
     rdf_graph.add((uri, RDF.type, OWL.Class))
@@ -56,12 +49,25 @@ def fetch_cve_nvd(start=0, results_per_page=20):
     response = requests.get(url)
     return response.json()
 
-# ======================== 6. INSERTION DANS NEO4J ========================
+# ======================== 6. UTILS ========================
+def parse_cpe(cpe_uri):
+    try:
+        parts = cpe_uri.split(":")
+        return {
+            "part": parts[2],
+            "vendor": parts[3],
+            "product": parts[4],
+            "version": parts[5] if len(parts) > 5 else "unknown"
+        }
+    except:
+        return {}
+
+# ======================== 7. INSERTION ========================
 def insert_cve_neo4j(item):
     cve_id = item["cve"]["id"]
     description = item["cve"]["descriptions"][0]["value"]
     published = item["cve"].get("published")
-
+    
     cve_node = Node("CVE", name=cve_id, description=description, source="NVD")
     if published:
         cve_node["published"] = published
@@ -85,10 +91,8 @@ def insert_cve_neo4j(item):
         for desc in weakness.get("description", []):
             cwe_id = desc["value"]
             if "CWE" in cwe_id:
-                existing = graph.nodes.match("CWE", name=cwe_id).first()
-                cwe_node = existing if existing else Node("CWE", name=cwe_id)
-                if not existing:
-                    graph.create(cwe_node)
+                cwe_node = Node("CWE", name=cwe_id)
+                graph.merge(cwe_node, "CWE", "name")
                 graph.merge(Relationship(cve_node, "ASSOCIATED_WITH", cwe_node))
 
     try:
@@ -99,7 +103,31 @@ def insert_cve_neo4j(item):
                 cpe_node = Node("CPE", name=cpe_uri)
                 graph.merge(cpe_node, "CPE", "name")
                 graph.merge(Relationship(cve_node, "AFFECTS", cpe_node))
-    except Exception:
+
+                parsed = parse_cpe(cpe_uri)
+                vendor_node = Node("Vendor", name=parsed["vendor"])
+                product_node = Node("Product", name=parsed["product"])
+                version_node = Node("Version", name=parsed["version"])
+                
+                graph.merge(vendor_node, "Vendor", "name")
+                graph.merge(product_node, "Product", "name")
+                graph.merge(version_node, "Version", "name")
+
+                graph.merge(Relationship(product_node, "has_version", version_node))
+                graph.merge(Relationship(product_node, "published_by", vendor_node))
+                graph.merge(Relationship(cpe_node, "identifies", product_node))
+    except:
+        pass
+
+    try:
+        for ref in item["cve"].get("references", []):
+            url = ref.get("url", "")
+            if "CAPEC-" in url:
+                capec_id = "CAPEC-" + url.split("CAPEC-")[-1].split(".")[0]
+                capec_node = Node("CAPEC", name=capec_id)
+                graph.merge(capec_node, "CAPEC", "name")
+                graph.merge(Relationship(cve_node, "has_CAPEC", capec_node))
+    except:
         pass
 
     try:
@@ -113,7 +141,7 @@ def insert_cve_neo4j(item):
     except Exception as e:
         print(f"⚠️ NER erreur sur {cve_id}: {e}")
 
-# ======================== 7. PIPELINE ========================
+# ======================== 8. PIPELINE ========================
 def pipeline_kg1(start=0, results_per_page=10):
     print("🚀 Extraction CVE depuis NVD...")
     data = fetch_cve_nvd(start=start, results_per_page=results_per_page)
@@ -125,7 +153,8 @@ def pipeline_kg1(start=0, results_per_page=10):
             print(f"[!] Erreur {item['cve']['id']}: {e}")
     print("✅ KG1 inséré dans Neo4j.")
 
-# ======================== 8. EXÉCUTION ========================
+# ======================== 9. EXÉCUTION ========================
 if __name__ == "__main__":
     pipeline_kg1(start=0, results_per_page=20)
+
 
