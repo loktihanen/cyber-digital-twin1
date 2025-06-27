@@ -28,7 +28,9 @@ jobs:
 
       #- name: Run Alignment & Fusion
         #run: python cskg/align_and_merge.py
-
+        
+      - name: Run Ontologie
+        run: python cskg/ontologie.py
 
         
  #python cskg/analyse.py
