@@ -59,6 +59,9 @@ jobs:
      # - name: Run embeddingsRotateRGCN script
        # run: python cskg/embeddingsRotateRGCN.py
 
+      - name: Run digital_twin_update
+        run: python cskg/digital_twin_update.py
+      
       - name: Run KG1 (NVD)
         run: python cskg/collect_nvd.py
 
