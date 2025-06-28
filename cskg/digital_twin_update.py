@@ -26,10 +26,9 @@ def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
 
-    # Recherche des CVE modifiées dans les dernières 24h
     current_cves = list(nvdlib.searchCVE(
-        modStartDate=(datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat() + "Z",
-        resultsPerPage=1000
+        mod_start_date=(datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat() + "Z",
+        results_per_page=1000
     ))
 
     if not current_cves:
@@ -44,6 +43,7 @@ def is_nvd_updated():
 
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
+
 
 
 
