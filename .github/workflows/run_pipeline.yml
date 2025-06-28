@@ -42,8 +42,8 @@ jobs:
 
 
 
-      - name: Run embeddingsRotateRGCN script
-        run: python cskg/embeddingsRotateRGCN.py
+     # - name: Run embeddingsRotateRGCN script
+       # run: python cskg/embeddingsRotateRGCN.py
 
       - name: Run KG1 (NVD)
         run: python cskg/collect_nvd.py
@@ -56,13 +56,17 @@ jobs:
         
       - name: Run Ontologie
         run: python cskg/ontologie.py
-       
-      - name: Run Evaluation
-        run: python cskg/evaluate_alignment.py
-       
+        
       - name: Run cskg3_triples
         run: python cskg/cskg3_triples.py
         
+      - name: Run embeddingsRotateRGCN script
+        run: python cskg/embeddingsRotateRGCN.py
+        
+      - name: Run Evaluation
+        run: python cskg/evaluate_alignment.py
+       
+      
  #python cskg/analyse.py
  #python cskg/propagate_impacts.py
  #python cskg/fuse_unified_cves.py
