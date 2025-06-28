@@ -53,7 +53,10 @@ jobs:
 
       - name: Run Alignment & Fusion
         run: python cskg/align_and_merge.py
-        
+     
+      - name: Run Evaluation
+        run: python cskg/evaluate_alignment.py
+       
       - name: Run Ontologie
         run: python cskg/ontologie.py
         
@@ -62,10 +65,11 @@ jobs:
         
       - name: Run embeddingsRotateRGCN script
         run: python cskg/embeddingsRotateRGCN.py
+
+      - name: Run Evaluation embeddingsRotateR-GCN 
+        run: python cskg/R-GCNRotatEEvaluation.py
         
-      - name: Run Evaluation
-        run: python cskg/evaluate_alignment.py
-       
+
       
  #python cskg/analyse.py
  #python cskg/propagate_impacts.py
