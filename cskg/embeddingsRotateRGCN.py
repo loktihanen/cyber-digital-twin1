@@ -69,7 +69,7 @@ rotate_model = RotatEModel(len(entity2id), len(rel2id), embedding_dim=64)
 optimizer_rotate = torch.optim.Adam(rotate_model.parameters(), lr=0.01)
 
 print("🛠️ Entraînement RotatE...")
-for epoch in range(3):
+for epoch in range(100):
     rotate_model.train()
     optimizer_rotate.zero_grad()
     loss = -torch.mean(rotate_model(h_idx, r_idx, t_idx))
@@ -130,7 +130,7 @@ rgcn = RGCN(in_feat=64, hidden_feat=32, out_feat=2, num_rels=len(rel2id))
 optimizer_rgcn = torch.optim.Adam(rgcn.parameters(), lr=0.01)
 
 print("\n🛠️ Entraînement R-GCN...")
-for epoch in range(2):
+for epoch in range(50):
     rgcn.train()
     optimizer_rgcn.zero_grad()
     out = rgcn(data)
