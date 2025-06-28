@@ -12,7 +12,9 @@ pyvis
 streamlit
 tqdm
 pandas
-numpy
+numpy<2
+
+
 
 streamlit
 seaborn
