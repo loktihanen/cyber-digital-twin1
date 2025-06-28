@@ -21,12 +21,17 @@ def set_last_nvd_update_in_graph(timestamp):
         graph.create(node)
     node["last_nvd_update"] = timestamp
     graph.push(node)
-
 def is_nvd_updated():
+    import datetime
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
-    current_cves = nvdlib.getCVE(modStartDate=(datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat())
-    
+
+    # Recherche des CVE modifiées dans les dernières 24h
+    current_cves = list(nvdlib.searchCVE(
+        modStartDate=(datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat() + "Z",
+        resultsPerPage=1000
+    ))
+
     if not current_cves:
         print("⚠️ Aucune CVE récupérée via NVDLIB.")
         return False
@@ -39,6 +44,7 @@ def is_nvd_updated():
 
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
+
 
 
 # ======================== 3. Imports pipeline ========================
