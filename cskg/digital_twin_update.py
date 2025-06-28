@@ -26,12 +26,13 @@ def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
 
-    # ✅ Format compatible avec l'API NVD v2.0 (sans microsecondes)
-    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).replace(microsecond=0).isoformat()
+    # Format attendu par nvdlib : '2025-06-27 20:42'
+    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).replace(second=0, microsecond=0)
+    formatted_date = yesterday.strftime("%Y-%m-%d %H:%M")
 
     try:
         current_cves = list(nvdlib.searchCVE(
-            lastModStartDate=yesterday,
+            lastModStartDate=formatted_date,
             limit=1000
         ))
     except Exception as e:
@@ -50,6 +51,7 @@ def is_nvd_updated():
 
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
+
 
 # ======================== 3. Imports pipeline ========================
 from collect_nvd import pipeline_kg1
