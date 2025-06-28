@@ -1,5 +1,13 @@
 # ======================== 1. IMPORTS ========================
 from py2neo import Graph, Node, Relationship
+# ✅ Assure que numpy est bien importable
+try:
+    import numpy as np
+    print("✅ NumPy loaded:", np.__version__)
+except ImportError as e:
+    print("❌ NumPy not available:", e)
+    raise e
+
 from transformers import pipeline
 from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal
 from urllib.parse import unquote
