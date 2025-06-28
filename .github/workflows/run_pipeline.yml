@@ -45,11 +45,13 @@ jobs:
         #  pip install numpy
         #  pip install -r requirements.txt
         #  pip install transformers --upgrade
-      - name: Install base dependencies (force numpy)
+      - name: Install base dependencies (NumPy compatible)
         run: |
-          pip install numpy --upgrade --force-reinstall
-          pip install transformers --upgrade --force-reinstall
+          pip uninstall -y numpy
+          pip install "numpy<2"
           pip install -r requirements.txt
+          pip install transformers --upgrade
+
       - name: Debug installed packages
         run: pip list
 
