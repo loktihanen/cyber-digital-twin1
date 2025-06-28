@@ -21,14 +21,14 @@ def set_last_nvd_update_in_graph(timestamp):
         graph.create(node)
     node["last_nvd_update"] = timestamp
     graph.push(node)
-
 def is_nvd_updated():
+    from datetime import datetime, timedelta
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
 
-    # Format attendu par nvdlib : '2025-06-27 20:42'
-    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).replace(second=0, microsecond=0)
-    formatted_date = yesterday.strftime("%Y-%m-%d %H:%M")
+    # Format attendu : 2025-06-27T20:49:00.000Z
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    formatted_date = yesterday.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
     try:
         current_cves = list(nvdlib.searchCVE(
