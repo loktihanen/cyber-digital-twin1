@@ -1,4 +1,4 @@
- # ======================== 1. IMPORTS ========================
+  # ======================== 1. IMPORTS ========================
 from py2neo import Graph, Node, Relationship
 try:
     import numpy as np
@@ -11,6 +11,7 @@ from transformers import pipeline
 from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal, URIRef
 import requests
 import time
+from datetime import datetime
 
 # ======================== 2. CONNEXION NEO4J ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
@@ -76,6 +77,7 @@ def insert_cve_neo4j(item):
     cve_id = item["cve"]["id"]
     description = item["cve"]["descriptions"][0]["value"]
     published = item["cve"].get("published")
+    last_updated = item["cve"].get("lastModified") or published
 
     existing_node = graph.nodes.match("CVE", name=cve_id).first()
     if existing_node:
@@ -86,12 +88,10 @@ def insert_cve_neo4j(item):
     cve_node = Node("CVE", name=cve_id, description=description, source="NVD")
     if published:
         cve_node["published"] = published
-
-    # RDF CVE
-    rdf_cve = URIRef(f"http://example.org/cve/{cve_id}")
-    rdf_graph.add((rdf_cve, RDF.type, STUCO.Vulnerability))
-    rdf_graph.add((rdf_cve, RDFS.label, Literal(cve_id)))
-    rdf_graph.add((rdf_cve, RDFS.comment, Literal(description)))
+    if last_updated:
+        cve_node["lastUpdated"] = last_updated
+    # URI RDF
+    cve_node["uri"] = f"http://example.org/cve/{cve_id}"
 
     # CVSS metrics
     try:
@@ -109,6 +109,12 @@ def insert_cve_neo4j(item):
 
     graph.merge(cve_node, "CVE", "name")
 
+    # RDF CVE
+    rdf_cve = URIRef(cve_node["uri"])
+    rdf_graph.add((rdf_cve, RDF.type, STUCO.Vulnerability))
+    rdf_graph.add((rdf_cve, RDFS.label, Literal(cve_id)))
+    rdf_graph.add((rdf_cve, RDFS.comment, Literal(description)))
+
     # CWE
     for weakness in item["cve"].get("weaknesses", []):
         for desc in weakness.get("description", []):
@@ -116,15 +122,16 @@ def insert_cve_neo4j(item):
             if "CWE" in cwe_id:
                 cwe_node = graph.nodes.match("CWE", name=cwe_id).first()
                 if not cwe_node:
-                    cwe_node = Node("CWE", name=cwe_id)
+                    cwe_node = Node("CWE", name=cwe_id, source="NVD")
                     graph.create(cwe_node)
 
                 cwe_url = f"https://cwe.mitre.org/data/definitions/{cwe_id.replace('CWE-', '')}.html"
                 cwe_node["url"] = cwe_url
                 cwe_node["label"] = desc.get("description", "N/A")
+                cwe_node["uri"] = cwe_url
                 graph.push(cwe_node)
 
-                graph.merge(Relationship(cve_node, "ASSOCIATED_WITH", cwe_node))
+                graph.merge(Relationship(cve_node, "associatedWith", cwe_node))
 
                 # RDF CWE
                 rdf_cwe = URIRef(cwe_url)
@@ -139,24 +146,25 @@ def insert_cve_neo4j(item):
         for config in nodes:
             for cpe in config.get("cpeMatch", []):
                 cpe_uri = cpe["criteria"]
-                cpe_node = Node("CPE", name=cpe_uri)
+                cpe_node = Node("CPE", name=cpe_uri, source="NVD")
                 graph.merge(cpe_node, "CPE", "name")
-                graph.merge(Relationship(cve_node, "AFFECTS", cpe_node))
+                graph.merge(Relationship(cve_node, "affects", cpe_node))
 
                 parsed = parse_cpe(cpe_uri)
-                vendor_node = Node("Vendor", name=parsed["vendor"])
-                product_node = Node("Product", name=parsed["product"])
-                version_node = Node("Version", name=parsed["version"])
+                vendor_node = Node("Vendor", name=parsed["vendor"], source="NVD")
+                product_node = Node("Product", name=parsed["product"], source="NVD")
+                version_node = Node("Version", name=parsed["version"], source="NVD")
 
                 graph.merge(vendor_node, "Vendor", "name")
                 graph.merge(product_node, "Product", "name")
                 graph.merge(version_node, "Version", "name")
 
-                graph.merge(Relationship(product_node, "has_version", version_node))
-                graph.merge(Relationship(product_node, "published_by", vendor_node))
+                graph.merge(Relationship(product_node, "hasVersion", version_node))
+                graph.merge(Relationship(product_node, "publishedBy", vendor_node))
                 graph.merge(Relationship(cpe_node, "identifies", product_node))
+                graph.merge(Relationship(product_node, "hasCVE", cve_node))  # lien produit -> cve
 
-                # RDF CPE
+                # URI RDF
                 rdf_cpe = URIRef(f"http://example.org/cpe#{cpe_uri}")
                 rdf_graph.add((rdf_cpe, RDF.type, STUCO.Platform))
                 rdf_graph.add((rdf_cpe, RDFS.label, Literal(cpe_uri)))
@@ -170,11 +178,13 @@ def insert_cve_neo4j(item):
             url = ref.get("url", "")
             if "CAPEC-" in url:
                 capec_id = "CAPEC-" + url.split("CAPEC-")[-1].split(".")[0]
-                capec_node = Node("CAPEC", name=capec_id)
+                capec_node = Node("CAPEC", name=capec_id, source="NVD")
                 graph.merge(capec_node, "CAPEC", "name")
-                graph.merge(Relationship(cve_node, "has_CAPEC", capec_node))
+                graph.merge(Relationship(cve_node, "hasCapec", capec_node))
 
                 capec_url = f"https://capec.mitre.org/data/definitions/{capec_id.replace('CAPEC-', '')}.html"
+                capec_node["uri"] = capec_url
+
                 rdf_capec = URIRef(capec_url)
                 rdf_graph.add((rdf_capec, RDF.type, CYBER.CAPEC))
                 rdf_graph.add((rdf_capec, RDFS.label, Literal(capec_id)))
@@ -188,9 +198,9 @@ def insert_cve_neo4j(item):
         for ent in entities:
             word = ent["word"]
             ent_type = ent["entity_group"]
-            ent_node = Node("Entity", name=word, type=ent_type)
+            ent_node = Node("Entity", name=word, entityType=ent_type, source="NVD")
             graph.merge(ent_node, "Entity", "name")
-            graph.merge(Relationship(cve_node, "MENTIONS", ent_node))
+            graph.merge(Relationship(cve_node, "mentions", ent_node))
     except Exception as e:
         print(f"⚠️ NER erreur sur {cve_id}: {e}")
 
@@ -210,4 +220,4 @@ def pipeline_kg1(start=0, results_per_page=10):
 # ======================== 9. EXÉCUTION ========================
 if __name__ == "__main__":
     pipeline_kg1(start=0, results_per_page=2000)
-               
+      
