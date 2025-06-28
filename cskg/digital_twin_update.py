@@ -1,6 +1,7 @@
 from py2neo import Graph, Node
 import datetime
 import nvdlib
+import inspect
 
 # ======================== 1. Connexion Neo4j ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
@@ -8,6 +9,7 @@ user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
 graph = Graph(uri, auth=(user, password))
 
+print("✅ Connexion Neo4j réussie")
 
 # ======================== 2. Vérification mise à jour NVD ========================
 def get_last_nvd_update_in_graph():
@@ -21,15 +23,22 @@ def set_last_nvd_update_in_graph(timestamp):
         graph.create(node)
     node["last_nvd_update"] = timestamp
     graph.push(node)
+
 def is_nvd_updated():
-    import datetime
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
 
-    current_cves = list(nvdlib.searchCVE(
-        mod_start_date=(datetime.datetime.utcnow() - datetime.timedelta(days=1)).isoformat() + "Z",
-        results_per_page=1000
-    ))
+    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S:000 UTC+00:00")
+    
+    try:
+        current_cves = list(nvdlib.searchCVE(
+            modStartDate=yesterday,
+            resultsPerPage=1000
+        ))
+    except TypeError as e:
+        print("❌ Erreur nvdlib : paramètre non reconnu.")
+        print(inspect.signature(nvdlib.searchCVE))  # Affiche les bons noms
+        raise e
 
     if not current_cves:
         print("⚠️ Aucune CVE récupérée via NVDLIB.")
@@ -44,9 +53,6 @@ def is_nvd_updated():
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
 
-
-
-
 # ======================== 3. Imports pipeline ========================
 from collect_nvd import pipeline_kg1             # CSKG1 ← NVD
 from inject_nessus import pipeline_kg2           # CSKG2 ← Nessus
@@ -57,7 +63,6 @@ from align_and_merge import (                    # Fusion enrichie CSKG1 + CSKG2
     create_network_links, recommend_patches,
     add_network_segments, debug_invalid_hosts
 )
-
 
 # ======================== 4. Étapes du pipeline ========================
 def enrich_graph():
@@ -95,7 +100,6 @@ def simulate_risk_per_host():
         print(f"🔹 {row['host']} → Risk: {round(row['averageRisk'],2)} ({row['vulnCount']} vulnérabilités)")
     print("✅ Scores de risque mis à jour dans Neo4j.")
 
-
 # ======================== 5. Pipeline principal ========================
 def main():
     if is_nvd_updated():
@@ -114,7 +118,6 @@ def main():
         simulate_risk_per_host()
     else:
         print("📉 Pas de traitement : la NVD n’a pas été mise à jour.")
-
 
 # ======================== 6. Exécution ========================
 if __name__ == "__main__":
