@@ -1,4 +1,4 @@
-# ======================== 1. IMPORTS ========================
+ # ======================== 1. IMPORTS ========================
 from py2neo import Graph, Node, Relationship
 # ✅ Assure que numpy est bien importable
 try:
@@ -9,7 +9,7 @@ except ImportError as e:
     raise e
 
 from transformers import pipeline
-from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal
+from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal, URIRef
 from urllib.parse import unquote
 import requests
 import time
@@ -32,10 +32,16 @@ rdf_graph = RDFGraph()
 UCO = Namespace("https://ontology.unifiedcyberontology.org/uco#")
 STUCO = Namespace("http://w3id.org/sepses/vocab/ref/stuco#")
 CYBER = Namespace("http://example.org/cyber#")
+CWE = Namespace("https://cwe.mitre.org/data/definitions/")
+CPE = Namespace("http://example.org/cpe#")
+CAPEC = Namespace("https://capec.mitre.org/data/definitions/")
 
 rdf_graph.bind("uco", UCO)
 rdf_graph.bind("stuco", STUCO)
 rdf_graph.bind("cyber", CYBER)
+rdf_graph.bind("cwe", CWE)
+rdf_graph.bind("cpe", CPE)
+rdf_graph.bind("capec", CAPEC)
 
 classes = [
     ("CVE", STUCO.Vulnerability), ("CWE", STUCO.Weakness), ("CPE", STUCO.Platform),
@@ -76,12 +82,23 @@ def insert_cve_neo4j(item):
     description = item["cve"]["descriptions"][0]["value"]
     published = item["cve"].get("published")
 
+    existing_node = graph.nodes.match("CVE", name=cve_id).first()
+    if existing_node:
+        if existing_node.get("description") == description:
+            print(f"⏭️ {cve_id} déjà présent et inchangé.")
+            return
+
     cve_node = Node("CVE", name=cve_id, description=description, source="NVD")
     if published:
         cve_node["published"] = published
 
+    rdf_cve = URIRef(f"http://example.org/cve/{cve_id}")
+    rdf_graph.add((rdf_cve, RDF.type, STUCO.Vulnerability))
+    rdf_graph.add((rdf_cve, RDFS.label, Literal(cve_id)))
+    rdf_graph.add((rdf_cve, RDFS.comment, Literal(description)))
+
     try:
-        metrics = item["cve"]["metrics"]
+        metrics = item["cve"].get("metrics", {})
         if "cvssMetricV31" in metrics:
             data = metrics["cvssMetricV31"][0]["cvssData"]
             cve_node["cvss_score"] = data["baseScore"]
@@ -99,16 +116,26 @@ def insert_cve_neo4j(item):
         for desc in weakness.get("description", []):
             cwe_id = desc["value"]
             if "CWE" in cwe_id:
-                existing_cwe = graph.nodes.match("CWE", name=cwe_id).first()
-                if existing_cwe:
-                    cwe_node = existing_cwe
-                else:
+                cwe_node = graph.nodes.match("CWE", name=cwe_id).first()
+                if not cwe_node:
                     cwe_node = Node("CWE", name=cwe_id)
                     graph.create(cwe_node)
+
+                cwe_url = f"https://cwe.mitre.org/data/definitions/{cwe_id.replace('CWE-', '')}.html"
+                cwe_node["url"] = cwe_url
+                cwe_node["label"] = desc.get("description", "N/A")
+                graph.push(cwe_node)
+
                 graph.merge(Relationship(cve_node, "ASSOCIATED_WITH", cwe_node))
 
+                rdf_cwe = URIRef(cwe_url)
+                rdf_graph.add((rdf_cwe, RDF.type, STUCO.Weakness))
+                rdf_graph.add((rdf_cwe, RDFS.label, Literal(cwe_id)))
+                rdf_graph.add((rdf_cwe, RDFS.comment, Literal(desc.get("description", ""))))
+                rdf_graph.add((rdf_cve, CYBER.associatedWith, rdf_cwe))
+
     try:
-        nodes = item["cve"]["configurations"][0]["nodes"]
+        nodes = item["cve"].get("configurations", [{}])[0].get("nodes", [])
         for config in nodes:
             for cpe in config.get("cpeMatch", []):
                 cpe_uri = cpe["criteria"]
@@ -128,6 +155,11 @@ def insert_cve_neo4j(item):
                 graph.merge(Relationship(product_node, "has_version", version_node))
                 graph.merge(Relationship(product_node, "published_by", vendor_node))
                 graph.merge(Relationship(cpe_node, "identifies", product_node))
+
+                rdf_cpe = URIRef(f"http://example.org/cpe#{cpe_uri}")
+                rdf_graph.add((rdf_cpe, RDF.type, STUCO.Platform))
+                rdf_graph.add((rdf_cpe, RDFS.label, Literal(cpe_uri)))
+                rdf_graph.add((rdf_cve, CYBER.affects, rdf_cpe))
     except:
         pass
 
@@ -139,6 +171,12 @@ def insert_cve_neo4j(item):
                 capec_node = Node("CAPEC", name=capec_id)
                 graph.merge(capec_node, "CAPEC", "name")
                 graph.merge(Relationship(cve_node, "has_CAPEC", capec_node))
+
+                capec_url = f"https://capec.mitre.org/data/definitions/{capec_id.replace('CAPEC-', '')}.html"
+                rdf_capec = URIRef(capec_url)
+                rdf_graph.add((rdf_capec, RDF.type, CYBER.CAPEC))
+                rdf_graph.add((rdf_capec, RDFS.label, Literal(capec_id)))
+                rdf_graph.add((rdf_cve, CYBER.hasCAPEC, rdf_capec))
     except:
         pass
 
@@ -163,7 +201,8 @@ def pipeline_kg1(start=0, results_per_page=10):
             time.sleep(0.2)
         except Exception as e:
             print(f"[!] Erreur {item['cve']['id']}: {e}")
-    print("✅ KG1 inséré dans Neo4j.")
+    rdf_graph.serialize(destination="kg1.ttl", format="turtle")
+    print("✅ KG1 inséré dans Neo4j et kg1.ttl mis à jour.")
 
 # ======================== 9. EXÉCUTION ========================
 if __name__ == "__main__":
