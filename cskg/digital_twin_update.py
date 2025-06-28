@@ -28,16 +28,17 @@ def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
 
-    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S:000 UTC+00:00")
+    # ✅ Utilisation d'un objet datetime directement
+    yesterday = datetime.datetime.utcnow() - datetime.timedelta(days=1)
 
     try:
         current_cves = list(nvdlib.searchCVE(
             lastModStartDate=yesterday,
             limit=1000
         ))
-    except TypeError as e:
-        print("❌ Erreur nvdlib : paramètre non reconnu.")
-        print(inspect.signature(nvdlib.searchCVE))  # Pour affichage debug
+    except Exception as e:
+        print("❌ Erreur lors de l’appel à nvdlib.searchCVE() :", e)
+        print("🔍 Signature attendue :", inspect.signature(nvdlib.searchCVE))
         raise e
 
     if not current_cves:
