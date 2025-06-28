@@ -1,6 +1,5 @@
  # ======================== 1. IMPORTS ========================
 from py2neo import Graph, Node, Relationship
-# ✅ Assure que numpy est bien importable
 try:
     import numpy as np
     print("✅ NumPy loaded:", np.__version__)
@@ -10,10 +9,8 @@ except ImportError as e:
 
 from transformers import pipeline
 from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal, URIRef
-from urllib.parse import unquote
 import requests
 import time
-import os
 
 # ======================== 2. CONNEXION NEO4J ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
@@ -51,8 +48,6 @@ classes = [
 for label, uri in classes:
     rdf_graph.add((uri, RDF.type, OWL.Class))
     rdf_graph.add((uri, RDFS.label, Literal(label)))
-
-rdf_graph.serialize(destination="kg1.ttl", format="turtle")
 
 # ======================== 4. NER AVEC BERT ========================
 ner = pipeline("ner", model="dslim/bert-base-NER", aggregation_strategy="simple")
@@ -92,11 +87,13 @@ def insert_cve_neo4j(item):
     if published:
         cve_node["published"] = published
 
+    # RDF CVE
     rdf_cve = URIRef(f"http://example.org/cve/{cve_id}")
     rdf_graph.add((rdf_cve, RDF.type, STUCO.Vulnerability))
     rdf_graph.add((rdf_cve, RDFS.label, Literal(cve_id)))
     rdf_graph.add((rdf_cve, RDFS.comment, Literal(description)))
 
+    # CVSS metrics
     try:
         metrics = item["cve"].get("metrics", {})
         if "cvssMetricV31" in metrics:
@@ -112,6 +109,7 @@ def insert_cve_neo4j(item):
 
     graph.merge(cve_node, "CVE", "name")
 
+    # CWE
     for weakness in item["cve"].get("weaknesses", []):
         for desc in weakness.get("description", []):
             cwe_id = desc["value"]
@@ -128,12 +126,14 @@ def insert_cve_neo4j(item):
 
                 graph.merge(Relationship(cve_node, "ASSOCIATED_WITH", cwe_node))
 
+                # RDF CWE
                 rdf_cwe = URIRef(cwe_url)
                 rdf_graph.add((rdf_cwe, RDF.type, STUCO.Weakness))
                 rdf_graph.add((rdf_cwe, RDFS.label, Literal(cwe_id)))
                 rdf_graph.add((rdf_cwe, RDFS.comment, Literal(desc.get("description", ""))))
                 rdf_graph.add((rdf_cve, CYBER.associatedWith, rdf_cwe))
 
+    # CPE
     try:
         nodes = item["cve"].get("configurations", [{}])[0].get("nodes", [])
         for config in nodes:
@@ -156,6 +156,7 @@ def insert_cve_neo4j(item):
                 graph.merge(Relationship(product_node, "published_by", vendor_node))
                 graph.merge(Relationship(cpe_node, "identifies", product_node))
 
+                # RDF CPE
                 rdf_cpe = URIRef(f"http://example.org/cpe#{cpe_uri}")
                 rdf_graph.add((rdf_cpe, RDF.type, STUCO.Platform))
                 rdf_graph.add((rdf_cpe, RDFS.label, Literal(cpe_uri)))
@@ -163,6 +164,7 @@ def insert_cve_neo4j(item):
     except:
         pass
 
+    # CAPEC
     try:
         for ref in item["cve"].get("references", []):
             url = ref.get("url", "")
@@ -180,6 +182,7 @@ def insert_cve_neo4j(item):
     except:
         pass
 
+    # Entités NER
     try:
         entities = ner(description)
         for ent in entities:
@@ -207,5 +210,4 @@ def pipeline_kg1(start=0, results_per_page=10):
 # ======================== 9. EXÉCUTION ========================
 if __name__ == "__main__":
     pipeline_kg1(start=0, results_per_page=2000)
-
-
+               
