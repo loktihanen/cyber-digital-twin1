@@ -1,14 +1,12 @@
 from py2neo import Graph, Node
 import datetime
 import nvdlib
-import inspect
 
 # ======================== 1. Connexion Neo4j ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
 graph = Graph(uri, auth=(user, password))
-
 print("✅ Connexion Neo4j réussie")
 
 # ======================== 2. Vérification mise à jour NVD ========================
@@ -28,8 +26,8 @@ def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
     last = get_last_nvd_update_in_graph()
 
-    # ✅ Utilisation d'un objet datetime directement
-    yesterday = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+    # ✅ Format compatible avec l'API NVD v2.0 (sans microsecondes)
+    yesterday = (datetime.datetime.utcnow() - datetime.timedelta(days=1)).replace(microsecond=0).isoformat()
 
     try:
         current_cves = list(nvdlib.searchCVE(
@@ -38,7 +36,6 @@ def is_nvd_updated():
         ))
     except Exception as e:
         print("❌ Erreur lors de l’appel à nvdlib.searchCVE() :", e)
-        print("🔍 Signature attendue :", inspect.signature(nvdlib.searchCVE))
         raise e
 
     if not current_cves:
@@ -55,9 +52,9 @@ def is_nvd_updated():
     return False
 
 # ======================== 3. Imports pipeline ========================
-from collect_nvd import pipeline_kg1             # CSKG1 ← NVD
-from inject_nessus import pipeline_kg2           # CSKG2 ← Nessus
-from align_and_merge import (                    # Fusion enrichie CSKG1 + CSKG2
+from collect_nvd import pipeline_kg1
+from inject_nessus import pipeline_kg2
+from align_and_merge import (
     align_cve_nodes, fuse_cve_same_as,
     align_and_merge_vendors_products,
     update_plugin_cve_relations,
