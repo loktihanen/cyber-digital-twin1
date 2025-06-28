@@ -159,6 +159,6 @@ def pipeline_kg1(start=0, results_per_page=10):
 
 # ======================== 9. EXÉCUTION ========================
 if __name__ == "__main__":
-    pipeline_kg1(start=0, results_per_page=20)
+    pipeline_kg1(start=0, results_per_page=2000)
 
 
