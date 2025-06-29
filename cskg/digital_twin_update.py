@@ -139,7 +139,7 @@ def simulate_risk_per_host():
     print("🧮 Étape 6 : Simulation de risque par hôte")
     query = """
     MATCH (h:Host)-[:vulnerableTo]->(c:CVE_UNIFIED)
-    WHERE exists(c.cvssScore)
+    WHERE c.cvssScore IS NOT NULL
     WITH h, avg(toFloat(c.cvssScore)) AS avgRisk, count(c) AS vulnCount
     SET h.riskScore = avgRisk, h.vulnerabilityCount = vulnCount
     RETURN h.name AS host, avgRisk AS averageRisk, vulnCount
@@ -150,6 +150,7 @@ def simulate_risk_per_host():
     for row in results:
         print(f"🔹 {row['host']} → Risk: {round(row['averageRisk'],2)} ({row['vulnCount']} vulnérabilités)")
     print("✅ Scores de risque mis à jour dans Neo4j.")
+
 
 # ======================== 7. Pipeline principal ========================
 def main():
