@@ -1,5 +1,5 @@
 from py2neo import Graph, Node
-import datetime
+from datetime import datetime, timedelta
 import nvdlib
 
 # ======================== 1. Connexion Neo4j ========================
@@ -21,23 +21,19 @@ def set_last_nvd_update_in_graph(timestamp):
         graph.create(node)
     node["last_nvd_update"] = timestamp
     graph.push(node)
-from datetime import datetime, timedelta
-
-from datetime import datetime, timedelta
-import nvdlib
 
 def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
 
     last = get_last_nvd_update_in_graph()
-    mod_start = (datetime.utcnow() - timedelta(days=1)).replace(microsecond=0)
-    mod_end = datetime.utcnow().replace(microsecond=0)
+    mod_start = (datetime.utcnow() - timedelta(days=1)).replace(second=0, microsecond=0)
+    mod_end = datetime.utcnow().replace(second=0, microsecond=0)
 
     try:
         current_cves = list(nvdlib.searchCVE(
-            lastModStartDate=mod_start.isoformat() + "Z",
-            lastModEndDate=mod_end.isoformat() + "Z",
-            limit=1000  # ✅ pas `resultsPerPage`
+            lastModStartDate=mod_start.strftime("%Y-%m-%d %H:%M"),
+            lastModEndDate=mod_end.strftime("%Y-%m-%d %H:%M"),
+            limit=1000
         ))
     except Exception as e:
         print("❌ Erreur lors de l’appel à nvdlib.searchCVE() :", e)
@@ -55,8 +51,6 @@ def is_nvd_updated():
 
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
-
-
 
 # ======================== 3. Imports pipeline ========================
 from collect_nvd import pipeline_kg1
