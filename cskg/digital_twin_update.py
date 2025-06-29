@@ -1,7 +1,9 @@
 from py2neo import Graph, Node
+from py2neo.errors import ServiceUnavailable
 from datetime import datetime, timedelta
 import nvdlib
 import os
+import time
 
 # ======================== 1. Connexion Neo4j ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
@@ -94,7 +96,25 @@ from align_and_merge import (
     add_network_segments, debug_invalid_hosts
 )
 
-# ======================== 5. Étapes du pipeline ========================
+# ======================== 5. Requête Cypher avec reconnexion ========================
+def safe_run_query(graph, query, parameters=None, retries=3):
+    for attempt in range(retries):
+        try:
+            return graph.run(query, parameters).data()
+        except ServiceUnavailable as e:
+            print(f"❌ Erreur de connexion Neo4j (tentative {attempt+1}) : {e}")
+            if attempt < retries - 1:
+                print("🔄 Reconnexion en cours...")
+                time.sleep(2)
+                try:
+                    global graph
+                    graph = Graph(uri, auth=(user, password))
+                except Exception as conn_err:
+                    print(f"⚠️ Échec reconnexion : {conn_err}")
+            else:
+                raise
+
+# ======================== 6. Étapes du pipeline ========================
 def enrich_graph():
     print("🧠 Étape 4 : Enrichissements intelligents")
     align_and_merge_vendors_products()
@@ -111,7 +131,7 @@ def update_nessus_from_new_cves():
     MATCH (c:CVE_UNIFIED)-[:SAME_AS]->(:CVE)<-[:detects]-(p:Plugin)<-[:runsPlugin]-(h:Host)
     MERGE (h)-[:vulnerableTo]->(c)
     """
-    graph.run(query)
+    safe_run_query(graph, query)
     print("✅ Hôtes Nessus mis à jour avec les nouvelles vulnérabilités")
 
 def simulate_risk_per_host():
@@ -124,13 +144,13 @@ def simulate_risk_per_host():
     RETURN h.name AS host, avgRisk AS averageRisk, vulnCount
     ORDER BY avgRisk DESC
     """
-    results = graph.run(query).data()
+    results = safe_run_query(graph, query)
     print("📊 Résultats de la simulation de risque :")
     for row in results:
         print(f"🔹 {row['host']} → Risk: {round(row['averageRisk'],2)} ({row['vulnCount']} vulnérabilités)")
     print("✅ Scores de risque mis à jour dans Neo4j.")
 
-# ======================== 6. Pipeline principal ========================
+# ======================== 7. Pipeline principal ========================
 def main():
     nvd_flag = is_nvd_updated()
     nessus_flag = is_nessus_updated()
@@ -142,7 +162,7 @@ def main():
 
         if nessus_flag:
             print("\n⚙️ Étape 2 : Reconstruction de CSKG2 (Nessus)")
-            pipeline_kg2(graph)  # ✅ Correction ici
+            pipeline_kg2(graph)
 
         print("\n🔗 Étape 3 : Alignement & Fusion CSKG1 + CSKG2")
         align_cve_nodes()
@@ -154,7 +174,6 @@ def main():
     else:
         print("📉 Pas de traitement : ni la NVD ni Nessus n’ont été mis à jour.")
 
-# ======================== 7. Exécution ========================
+# ======================== 8. Exécution ========================
 if __name__ == "__main__":
     main()
- 
