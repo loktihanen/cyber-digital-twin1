@@ -1,6 +1,7 @@
 from py2neo import Graph, Node
 from datetime import datetime, timedelta
 import nvdlib
+import os
 
 # ======================== 1. Connexion Neo4j ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
@@ -52,7 +53,38 @@ def is_nvd_updated():
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
 
-# ======================== 3. Imports pipeline ========================
+# ======================== 3. Vérification mise à jour Nessus ========================
+def get_last_nessus_update_in_graph():
+    node = graph.nodes.match("UpdateLog", name="NESSUS").first()
+    return node["last_nessus_update"] if node else None
+
+def set_last_nessus_update_in_graph(timestamp):
+    node = graph.nodes.match("UpdateLog", name="NESSUS").first()
+    if not node:
+        node = Node("UpdateLog", name="NESSUS")
+        graph.create(node)
+    node["last_nessus_update"] = timestamp
+    graph.push(node)
+
+def is_nessus_updated():
+    print("🔎 Vérification des mises à jour Nessus...")
+    csv_path = "data/nessuss-scan1.csv"
+    if not os.path.exists(csv_path):
+        print("❌ Fichier Nessus introuvable :", csv_path)
+        return False
+
+    last_csv_mod = datetime.utcfromtimestamp(os.path.getmtime(csv_path))
+    last_logged = get_last_nessus_update_in_graph()
+
+    if not last_logged or last_csv_mod > last_logged:
+        print(f"🆕 Mise à jour détectée dans les résultats Nessus : {last_csv_mod}")
+        set_last_nessus_update_in_graph(last_csv_mod)
+        return True
+
+    print("✅ Pas de nouveau scan Nessus détecté.")
+    return False
+
+# ======================== 4. Imports pipeline ========================
 from collect_nvd import pipeline_kg1
 from inject_nessus import pipeline_kg2
 from align_and_merge import (
@@ -63,7 +95,7 @@ from align_and_merge import (
     add_network_segments, debug_invalid_hosts
 )
 
-# ======================== 4. Étapes du pipeline ========================
+# ======================== 5. Étapes du pipeline ========================
 def enrich_graph():
     print("🧠 Étape 4 : Enrichissements intelligents")
     align_and_merge_vendors_products()
@@ -99,14 +131,19 @@ def simulate_risk_per_host():
         print(f"🔹 {row['host']} → Risk: {round(row['averageRisk'],2)} ({row['vulnCount']} vulnérabilités)")
     print("✅ Scores de risque mis à jour dans Neo4j.")
 
-# ======================== 5. Pipeline principal ========================
+# ======================== 6. Pipeline principal ========================
 def main():
-    if is_nvd_updated():
-        print("\n🚀 Étape 1 : Reconstruction de CSKG1 (NVD)")
-        pipeline_kg1(start=0, results_per_page=2000)
+    nvd_flag = is_nvd_updated()
+    nessus_flag = is_nessus_updated()
 
-        print("\n⚙️ Étape 2 : Reconstruction de CSKG2 (Nessus)")
-        pipeline_kg2()
+    if nvd_flag or nessus_flag:
+        if nvd_flag:
+            print("\n🚀 Étape 1 : Reconstruction de CSKG1 (NVD)")
+            pipeline_kg1(start=0, results_per_page=2000)
+
+        if nessus_flag:
+            print("\n⚙️ Étape 2 : Reconstruction de CSKG2 (Nessus)")
+            pipeline_kg2()
 
         print("\n🔗 Étape 3 : Alignement & Fusion CSKG1 + CSKG2")
         align_cve_nodes()
@@ -116,8 +153,8 @@ def main():
         update_nessus_from_new_cves()
         simulate_risk_per_host()
     else:
-        print("📉 Pas de traitement : la NVD n’a pas été mise à jour.")
+        print("📉 Pas de traitement : ni la NVD ni Nessus n’ont été mis à jour.")
 
-# ======================== 6. Exécution ========================
+# ======================== 7. Exécution ========================
 if __name__ == "__main__":
     main()
