@@ -1,23 +1,10 @@
 # ======================== 1. IMPORTS ========================
 from py2neo import Graph, Node, Relationship
-from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal, URIRef
+from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal
 import pandas as pd
-import os
 from datetime import datetime
 
-# ======================== 2. CONNEXION NEO4J ========================
-uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
-user = "neo4j"
-password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-graph = Graph(uri, auth=(user, password))
-
-try:
-    info = graph.run("RETURN 1").data()
-    print("Connexion Neo4j réussie :", info)
-except Exception as e:
-    print("Erreur de connexion Neo4j :", e)
-
-# ======================== 3. ONTOLOGIE RDF ========================
+# ======================== 2. ONTOLOGIE RDF ========================
 rdf_graph = RDFGraph()
 UCO = Namespace("https://ontology.unifiedcyberontology.org/uco#")
 STUCO = Namespace("http://w3id.org/sepses/vocab/ref/stuco#")
@@ -57,7 +44,7 @@ for label, uri in relations:
 rdf_graph.serialize(destination="kg2.ttl", format="turtle")
 print("✅ Ontologie KG2 RDF exportée : kg2.ttl")
 
-# ======================== 4. CHARGEMENT CSV NESSUS ========================
+# ======================== 3. CHARGEMENT CSV NESSUS ========================
 NESSUS_CSV_PATH = "data/nessuss-scan1.csv"
 
 def load_nessus_data(path):
@@ -65,9 +52,8 @@ def load_nessus_data(path):
     df = df.fillna("")  # Évite les NaN
     return df
 
-# ======================== 5. INJECTION DANS NEO4J ========================
-def inject_nessus_to_neo4j(df):
-    # Date de mise à jour (aujourd'hui) pour lastUpdated
+# ======================== 4. INJECTION DANS NEO4J ========================
+def inject_nessus_to_neo4j(df, graph):
     update_date = datetime.utcnow().isoformat()
 
     for idx, row in df.iterrows():
@@ -83,19 +69,16 @@ def inject_nessus_to_neo4j(df):
         cve_list = str(row.get("CVE", "")).split(",")
 
         if not host_ip:
-            continue  # Ignore les lignes sans hôte
+            continue
 
-        # 🔹 Host
         host_node = Node("Host", name=host_ip, source="Nessus", lastUpdated=update_date)
         host_node["uri"] = f"http://example.org/host/{host_ip}"
         graph.merge(host_node, "Host", "name")
 
-        # 🔹 Plugin
         plugin_node = Node("Plugin", id=plugin_id, name=plugin_name, source="Nessus", lastUpdated=update_date)
         plugin_node["uri"] = f"http://example.org/plugin/{plugin_id}"
         graph.merge(plugin_node, "Plugin", "id")
 
-        # 🔹 Port
         if port:
             port_node = Node("Port", number=port, protocol=protocol, source="Nessus", lastUpdated=update_date)
             port_node["uri"] = f"http://example.org/port/{host_ip}_{port}"
@@ -105,7 +88,6 @@ def inject_nessus_to_neo4j(df):
         else:
             graph.merge(Relationship(host_node, "runsPlugin", plugin_node))
 
-        # 🔹 Service
         if service:
             service_node = Node("Service", name=service, source="Nessus", lastUpdated=update_date)
             service_node["uri"] = f"http://example.org/service/{service.replace(' ', '_')}"
@@ -114,21 +96,18 @@ def inject_nessus_to_neo4j(df):
             if port:
                 graph.merge(Relationship(service_node, "runsOnPort", port_node))
 
-        # 🔹 OS
         if os_name:
             os_node = Node("OperatingSystem", name=os_name, source="Nessus", lastUpdated=update_date)
             os_node["uri"] = f"http://example.org/os/{os_name.replace(' ', '_')}"
             graph.merge(os_node, "OperatingSystem", "name")
             graph.merge(Relationship(host_node, "hasOS", os_node))
 
-        # 🔹 Scanner
         if scanner:
             scanner_node = Node("Scanner", name=scanner, source="Nessus", lastUpdated=update_date)
             scanner_node["uri"] = f"http://example.org/scanner/{scanner.replace(' ', '_')}"
             graph.merge(scanner_node, "Scanner", "name")
             graph.merge(Relationship(host_node, "scannedBy", scanner_node))
 
-        # 🔹 CVEs
         for cve in cve_list:
             cve = cve.strip()
             if cve.startswith("CVE-"):
@@ -137,24 +116,27 @@ def inject_nessus_to_neo4j(df):
                 graph.merge(cve_node, "CVE", "name")
                 graph.merge(Relationship(plugin_node, "detects", cve_node))
                 graph.merge(Relationship(host_node, "vulnerableTo", cve_node))
-                # Relation inverse Plugin -> CVE pour harmonisation
                 graph.merge(Relationship(plugin_node, "hasCVE", cve_node))
 
-        # 🔹 Sévérité
         if severity:
             severity_node = Node("Severity", level=severity, source="Nessus", lastUpdated=update_date)
             severity_node["uri"] = f"http://example.org/severity/{severity.replace(' ', '_')}"
             graph.merge(severity_node, "Severity", "level")
             graph.merge(Relationship(host_node, "hasSeverity", severity_node))
 
-# ======================== 6. PIPELINE ========================
-def pipeline_kg2():
+# ======================== 5. PIPELINE ========================
+def pipeline_kg2(graph):
     print("📥 Chargement des données Nessus...")
     df = load_nessus_data(NESSUS_CSV_PATH)
     print(f"📊 {len(df)} lignes détectées.")
-    inject_nessus_to_neo4j(df)
+    inject_nessus_to_neo4j(df, graph)
     print("✅ Données Nessus injectées dans Neo4j.")
 
-# ======================== 7. EXECUTION ========================
+# ======================== 6. EXECUTION MANUELLE ========================
 if __name__ == "__main__":
-    pipeline_kg2()
+    uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
+    user = "neo4j"
+    password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
+    graph = Graph(uri, auth=(user, password))
+    pipeline_kg2(graph)
+ 
