@@ -22,17 +22,22 @@ def set_last_nvd_update_in_graph(timestamp):
     node["last_nvd_update"] = timestamp
     graph.push(node)
 from datetime import datetime, timedelta
+
+from datetime import datetime, timedelta
+import nvdlib
+
 def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
-    last = get_last_nvd_update_in_graph()
 
-    # ✅ Format accepté par l'API : sans microsecondes
+    last = get_last_nvd_update_in_graph()
     mod_start = (datetime.utcnow() - timedelta(days=1)).replace(microsecond=0)
+    mod_end = datetime.utcnow().replace(microsecond=0)
 
     try:
         current_cves = list(nvdlib.searchCVE(
-            lastModStartDate=mod_start,
-            limit=1000
+            lastModStartDate=mod_start.isoformat() + "Z",
+            lastModEndDate=mod_end.isoformat() + "Z",
+            limit=1000  # ✅ pas `resultsPerPage`
         ))
     except Exception as e:
         print("❌ Erreur lors de l’appel à nvdlib.searchCVE() :", e)
@@ -50,7 +55,6 @@ def is_nvd_updated():
 
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
-
 
 
 
