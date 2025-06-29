@@ -9,7 +9,11 @@ import time
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
-graph = Graph(uri, auth=(user, password))
+
+def connect_to_neo4j():
+    return Graph(uri, auth=(user, password))
+
+graph = connect_to_neo4j()
 print("✅ Connexion Neo4j réussie")
 
 # ======================== 2. Vérification mise à jour NVD ========================
@@ -104,15 +108,12 @@ def safe_run_query(graph, query, parameters=None, retries=3):
         except ServiceUnavailable as e:
             print(f"❌ Erreur de connexion Neo4j (tentative {attempt+1}) : {e}")
             if attempt < retries - 1:
-                print("🔄 Reconnexion en cours...")
+                print("🔄 Reconnexion à Neo4j...")
                 time.sleep(2)
-                try:
-                    global graph
-                    graph = Graph(uri, auth=(user, password))
-                except Exception as conn_err:
-                    print(f"⚠️ Échec reconnexion : {conn_err}")
+                graph = connect_to_neo4j()
             else:
                 raise
+    return []
 
 # ======================== 6. Étapes du pipeline ========================
 def enrich_graph():
