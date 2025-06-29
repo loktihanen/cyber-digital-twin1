@@ -1,11 +1,20 @@
-from py2neo import Graph, Node
+from py2neo import Graph, Node, Relationship
 from py2neo.errors import ServiceUnavailable
 from datetime import datetime, timedelta
 import nvdlib
 import os
 import time
+from collect_nvd import pipeline_kg1
+from inject_nessus import pipeline_kg2
+from align_and_merge import (
+    align_cve_nodes, fuse_cve_same_as,
+    align_and_merge_vendors_products,
+    update_plugin_cve_relations,
+    create_network_links, recommend_patches,
+    add_network_segments, debug_invalid_hosts
+)
 
-# ======================== 1. Connexion Neo4j ========================
+# ======================== Connexion ========================
 uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
 user = "neo4j"
 password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
@@ -16,7 +25,7 @@ def connect_to_neo4j():
 graph = connect_to_neo4j()
 print("✅ Connexion Neo4j réussie")
 
-# ======================== 2. Vérification mise à jour NVD ========================
+# ======================== Vérif maj NVD ========================
 def get_last_nvd_update_in_graph():
     node = graph.nodes.match("UpdateLog", name="NVD").first()
     return node["last_nvd_update"] if node else None
@@ -34,7 +43,6 @@ def is_nvd_updated():
     last = get_last_nvd_update_in_graph()
     mod_start = (datetime.utcnow() - timedelta(days=1)).replace(second=0, microsecond=0)
     mod_end = datetime.utcnow().replace(second=0, microsecond=0)
-
     try:
         current_cves = list(nvdlib.searchCVE(
             lastModStartDate=mod_start.strftime("%Y-%m-%d %H:%M"),
@@ -43,7 +51,7 @@ def is_nvd_updated():
         ))
     except Exception as e:
         print("❌ Erreur lors de l’appel à nvdlib.searchCVE() :", e)
-        raise e
+        return False
 
     if not current_cves:
         print("⚠️ Aucune CVE récupérée via NVDLIB.")
@@ -58,7 +66,7 @@ def is_nvd_updated():
     print("✅ Pas de nouvelle mise à jour NVD.")
     return False
 
-# ======================== 3. Vérification mise à jour Nessus ========================
+# ======================== Vérif maj Nessus ========================
 def get_last_nessus_update_in_graph():
     node = graph.nodes.match("UpdateLog", name="NESSUS").first()
     return node["last_nessus_update"] if node else None
@@ -89,18 +97,7 @@ def is_nessus_updated():
     print("✅ Pas de nouveau scan Nessus détecté.")
     return False
 
-# ======================== 4. Imports pipeline ========================
-from collect_nvd import pipeline_kg1
-from inject_nessus import pipeline_kg2
-from align_and_merge import (
-    align_cve_nodes, fuse_cve_same_as,
-    align_and_merge_vendors_products,
-    update_plugin_cve_relations,
-    create_network_links, recommend_patches,
-    add_network_segments, debug_invalid_hosts
-)
-
-# ======================== 5. Requête Cypher avec reconnexion ========================
+# ======================== Requête sûre ========================
 def safe_run_query(graph, query, parameters=None, retries=3):
     for attempt in range(retries):
         try:
@@ -115,7 +112,7 @@ def safe_run_query(graph, query, parameters=None, retries=3):
                 raise
     return []
 
-# ======================== 6. Étapes du pipeline ========================
+# ======================== Étapes enrichissement ========================
 def enrich_graph():
     print("🧠 Étape 4 : Enrichissements intelligents")
     align_and_merge_vendors_products()
@@ -130,7 +127,7 @@ def update_nessus_from_new_cves():
     print("💥 Étape 5 : Simulation des impacts des nouvelles CVE sur les hôtes")
     query = """
     MATCH (c:CVE_UNIFIED)-[:SAME_AS]->(:CVE)<-[:detects]-(p:Plugin)<-[:runsPlugin]-(h:Host)
-    MERGE (h)-[:vulnerableTo]->(c)
+    MERGE (h)-[:VULNERABLE_TO]->(c)
     """
     safe_run_query(graph, query)
     print("✅ Hôtes Nessus mis à jour avec les nouvelles vulnérabilités")
@@ -138,7 +135,7 @@ def update_nessus_from_new_cves():
 def simulate_risk_per_host():
     print("🧮 Étape 6 : Simulation de risque par hôte")
     query = """
-    MATCH (h:Host)-[:vulnerableTo]->(c:CVE_UNIFIED)
+    MATCH (h:Host)-[:VULNERABLE_TO]->(c:CVE_UNIFIED)
     WHERE c.cvssScore IS NOT NULL
     WITH h, avg(toFloat(c.cvssScore)) AS avgRisk, count(c) AS vulnCount
     SET h.riskScore = avgRisk, h.vulnerabilityCount = vulnCount
@@ -151,8 +148,7 @@ def simulate_risk_per_host():
         print(f"🔹 {row['host']} → Risk: {round(row['averageRisk'],2)} ({row['vulnCount']} vulnérabilités)")
     print("✅ Scores de risque mis à jour dans Neo4j.")
 
-
-# ======================== 7. Pipeline principal ========================
+# ======================== Pipeline principal ========================
 def main():
     nvd_flag = is_nvd_updated()
     nessus_flag = is_nessus_updated()
@@ -176,6 +172,6 @@ def main():
     else:
         print("📉 Pas de traitement : ni la NVD ni Nessus n’ont été mis à jour.")
 
-# ======================== 8. Exécution ========================
 if __name__ == "__main__":
     main()
+ 
