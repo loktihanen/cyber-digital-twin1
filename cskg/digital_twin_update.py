@@ -25,7 +25,6 @@ def set_last_nvd_update_in_graph(timestamp):
 
 def is_nvd_updated():
     print("🔎 Vérification des mises à jour NVD...")
-
     last = get_last_nvd_update_in_graph()
     mod_start = (datetime.utcnow() - timedelta(days=1)).replace(second=0, microsecond=0)
     mod_end = datetime.utcnow().replace(second=0, microsecond=0)
@@ -143,7 +142,7 @@ def main():
 
         if nessus_flag:
             print("\n⚙️ Étape 2 : Reconstruction de CSKG2 (Nessus)")
-            pipeline_kg2()
+            pipeline_kg2(graph)  # ✅ Correction ici
 
         print("\n🔗 Étape 3 : Alignement & Fusion CSKG1 + CSKG2")
         align_cve_nodes()
@@ -158,3 +157,4 @@ def main():
 # ======================== 7. Exécution ========================
 if __name__ == "__main__":
     main()
+ 
