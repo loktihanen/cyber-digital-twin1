@@ -53,9 +53,9 @@ def is_nvd_updated():
     return False
 
 # ======================== 3. Imports pipeline ========================
-from cskg.collect_nvd import pipeline_kg1
-from cskg.inject_nessus import pipeline_kg2
-from cskg.align_and_merge import (
+from collect_nvd import pipeline_kg1
+from inject_nessus import pipeline_kg2
+from align_and_merge import (
     align_cve_nodes, fuse_cve_same_as,
     align_and_merge_vendors_products,
     update_plugin_cve_relations,
@@ -121,4 +121,3 @@ def main():
 # ======================== 6. Exécution ========================
 if __name__ == "__main__":
     main()
- 
