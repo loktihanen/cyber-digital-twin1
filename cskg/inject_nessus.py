@@ -1,8 +1,10 @@
 # ======================== 1. IMPORTS ========================
 from py2neo import Graph, Node, Relationship
+from py2neo.errors import ServiceUnavailable
 from rdflib import Graph as RDFGraph, Namespace, RDF, RDFS, OWL, Literal
 import pandas as pd
 from datetime import datetime
+import time
 
 # ======================== 2. ONTOLOGIE RDF ========================
 rdf_graph = RDFGraph()
@@ -44,7 +46,26 @@ for label, uri in relations:
 rdf_graph.serialize(destination="kg2.ttl", format="turtle")
 print("✅ Ontologie KG2 RDF exportée : kg2.ttl")
 
-# ======================== 3. CHARGEMENT CSV NESSUS ========================
+# ======================== 3. FONCTION DE SECURISATION DES REQUÊTES NEO4J ========================
+def safe_merge(graph, node, label, key, retries=3, delay=2):
+    for attempt in range(retries):
+        try:
+            graph.merge(node, label, key)
+            return
+        except ServiceUnavailable as e:
+            print(f"⚠️ Neo4j indisponible (tentative {attempt + 1}) : {e}")
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                raise
+
+def safe_create_rel(graph, rel):
+    try:
+        graph.merge(rel)
+    except ServiceUnavailable as e:
+        print(f"⚠️ Erreur de relation : {e}")
+
+# ======================== 4. CHARGEMENT CSV NESSUS ========================
 NESSUS_CSV_PATH = "data/nessuss-scan1.csv"
 
 def load_nessus_data(path):
@@ -52,11 +73,14 @@ def load_nessus_data(path):
     df = df.fillna("")  # Évite les NaN
     return df
 
-# ======================== 4. INJECTION DANS NEO4J ========================
+# ======================== 5. INJECTION DANS NEO4J ========================
 def inject_nessus_to_neo4j(df, graph):
     update_date = datetime.utcnow().isoformat()
 
     for idx, row in df.iterrows():
+        if idx % 100 == 0:
+            print(f"⏳ Traitement de la ligne {idx}/{len(df)}")
+
         host_ip = row.get("Host", "").strip()
         plugin_id = str(row.get("Plugin ID", "")).strip()
         plugin_name = row.get("Name", "").strip()
@@ -73,58 +97,58 @@ def inject_nessus_to_neo4j(df, graph):
 
         host_node = Node("Host", name=host_ip, source="Nessus", lastUpdated=update_date)
         host_node["uri"] = f"http://example.org/host/{host_ip}"
-        graph.merge(host_node, "Host", "name")
+        safe_merge(graph, host_node, "Host", "name")
 
         plugin_node = Node("Plugin", id=plugin_id, name=plugin_name, source="Nessus", lastUpdated=update_date)
         plugin_node["uri"] = f"http://example.org/plugin/{plugin_id}"
-        graph.merge(plugin_node, "Plugin", "id")
+        safe_merge(graph, plugin_node, "Plugin", "id")
 
         if port:
             port_node = Node("Port", number=port, protocol=protocol, source="Nessus", lastUpdated=update_date)
             port_node["uri"] = f"http://example.org/port/{host_ip}_{port}"
-            graph.merge(port_node, "Port", "number")
-            graph.merge(Relationship(host_node, "exposes", port_node))
-            graph.merge(Relationship(port_node, "runsPlugin", plugin_node))
+            safe_merge(graph, port_node, "Port", "number")
+            safe_create_rel(graph, Relationship(host_node, "exposes", port_node))
+            safe_create_rel(graph, Relationship(port_node, "runsPlugin", plugin_node))
         else:
-            graph.merge(Relationship(host_node, "runsPlugin", plugin_node))
+            safe_create_rel(graph, Relationship(host_node, "runsPlugin", plugin_node))
 
         if service:
             service_node = Node("Service", name=service, source="Nessus", lastUpdated=update_date)
             service_node["uri"] = f"http://example.org/service/{service.replace(' ', '_')}"
-            graph.merge(service_node, "Service", "name")
-            graph.merge(Relationship(host_node, "hasService", service_node))
+            safe_merge(graph, service_node, "Service", "name")
+            safe_create_rel(graph, Relationship(host_node, "hasService", service_node))
             if port:
-                graph.merge(Relationship(service_node, "runsOnPort", port_node))
+                safe_create_rel(graph, Relationship(service_node, "runsOnPort", port_node))
 
         if os_name:
             os_node = Node("OperatingSystem", name=os_name, source="Nessus", lastUpdated=update_date)
             os_node["uri"] = f"http://example.org/os/{os_name.replace(' ', '_')}"
-            graph.merge(os_node, "OperatingSystem", "name")
-            graph.merge(Relationship(host_node, "hasOS", os_node))
+            safe_merge(graph, os_node, "OperatingSystem", "name")
+            safe_create_rel(graph, Relationship(host_node, "hasOS", os_node))
 
         if scanner:
             scanner_node = Node("Scanner", name=scanner, source="Nessus", lastUpdated=update_date)
             scanner_node["uri"] = f"http://example.org/scanner/{scanner.replace(' ', '_')}"
-            graph.merge(scanner_node, "Scanner", "name")
-            graph.merge(Relationship(host_node, "scannedBy", scanner_node))
+            safe_merge(graph, scanner_node, "Scanner", "name")
+            safe_create_rel(graph, Relationship(host_node, "scannedBy", scanner_node))
 
         for cve in cve_list:
             cve = cve.strip()
             if cve.startswith("CVE-"):
                 cve_node = Node("CVE", name=cve, source="Nessus", lastUpdated=update_date)
                 cve_node["uri"] = f"http://example.org/cve/{cve}"
-                graph.merge(cve_node, "CVE", "name")
-                graph.merge(Relationship(plugin_node, "detects", cve_node))
-                graph.merge(Relationship(host_node, "vulnerableTo", cve_node))
-                graph.merge(Relationship(plugin_node, "hasCVE", cve_node))
+                safe_merge(graph, cve_node, "CVE", "name")
+                safe_create_rel(graph, Relationship(plugin_node, "detects", cve_node))
+                safe_create_rel(graph, Relationship(host_node, "vulnerableTo", cve_node))
+                safe_create_rel(graph, Relationship(plugin_node, "hasCVE", cve_node))
 
         if severity:
             severity_node = Node("Severity", level=severity, source="Nessus", lastUpdated=update_date)
             severity_node["uri"] = f"http://example.org/severity/{severity.replace(' ', '_')}"
-            graph.merge(severity_node, "Severity", "level")
-            graph.merge(Relationship(host_node, "hasSeverity", severity_node))
+            safe_merge(graph, severity_node, "Severity", "level")
+            safe_create_rel(graph, Relationship(host_node, "hasSeverity", severity_node))
 
-# ======================== 5. PIPELINE ========================
+# ======================== 6. PIPELINE ========================
 def pipeline_kg2(graph):
     print("📥 Chargement des données Nessus...")
     df = load_nessus_data(NESSUS_CSV_PATH)
@@ -132,11 +156,10 @@ def pipeline_kg2(graph):
     inject_nessus_to_neo4j(df, graph)
     print("✅ Données Nessus injectées dans Neo4j.")
 
-# ======================== 6. EXECUTION MANUELLE ========================
+# ======================== 7. EXECUTION MANUELLE ========================
 if __name__ == "__main__":
     uri = "neo4j+s://8d5fbce8.databases.neo4j.io"
     user = "neo4j"
     password = "VpzGP3RDVB7AtQ1vfrQljYUgxw4VBzy0tUItWeRB9CM"
     graph = Graph(uri, auth=(user, password))
     pipeline_kg2(graph)
- 
