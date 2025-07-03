@@ -59,14 +59,14 @@ jobs:
      # - name: Run embeddingsRotateRGCN script
        # run: python cskg/embeddingsRotateRGCN.py
 
-      - name: Run digital_twin_update
-        run: python cskg/digital_twin_update.py
+      #- name: Run digital_twin_update
+       # run: python cskg/digital_twin_update.py
       
-      - name: Run KG1 (NVD)
-        run: python cskg/collect_nvd.py
+      #- name: Run KG1 (NVD)
+       # run: python cskg/collect_nvd.py
 
-      - name: Run KG2 (Nessus)
-        run: python cskg/inject_nessus.py
+      #- name: Run KG2 (Nessus)
+       # run: python cskg/inject_nessus.py
 
       - name: Run Alignment & Fusion
         run: python cskg/align_and_merge.py
