@@ -97,11 +97,34 @@ def merge_nodes(primary_node, secondary_node):
         graph.separate(rel)
     graph.delete(secondary_node)
 
+#def fuse_cve_same_as():
+  #  pairs = graph.run("""
+  #  MATCH (c:CVE)-[:SAME_AS]->(c2:CVE)
+   # RETURN DISTINCT c.name AS name1, c2.name AS name2
+   # """).data()
+   # matched = set()
+   # for pair in pairs:
+      #  name1, name2 = pair["name1"], pair["name2"]
+      #  key = tuple(sorted([name1, name2]))
+      #  if key in matched:
+       #     continue
+       # matched.add(key)
+       # unified_name = name1 if name1 < name2 else name2
+       # unified_node = graph.nodes.match("CVE_UNIFIED", name=unified_name).first()
+       # if not unified_node:
+         #   unified_node = Node("CVE_UNIFIED", name=unified_name)
+          #  graph.create(unified_node)
+       # for name in [name1, name2]:
+           # node = graph.nodes.match("CVE", name=name).first()
+           # if node:
+               # graph.merge(Relationship(unified_node, "SAME_AS", node))
+
 def fuse_cve_same_as():
     pairs = graph.run("""
     MATCH (c:CVE)-[:SAME_AS]->(c2:CVE)
     RETURN DISTINCT c.name AS name1, c2.name AS name2
     """).data()
+
     matched = set()
     for pair in pairs:
         name1, name2 = pair["name1"], pair["name2"]
@@ -109,15 +132,24 @@ def fuse_cve_same_as():
         if key in matched:
             continue
         matched.add(key)
+
         unified_name = name1 if name1 < name2 else name2
         unified_node = graph.nodes.match("CVE_UNIFIED", name=unified_name).first()
         if not unified_node:
             unified_node = Node("CVE_UNIFIED", name=unified_name)
             graph.create(unified_node)
+
         for name in [name1, name2]:
             node = graph.nodes.match("CVE", name=name).first()
             if node:
+                # ✅ Copier les propriétés clés si absentes
+                for key in ["cvssScore", "description", "published", "lastModified"]:
+                    if key in node and (key not in unified_node or unified_node[key] is None):
+                        unified_node[key] = node[key]
+
                 graph.merge(Relationship(unified_node, "SAME_AS", node))
+
+        graph.push(unified_node)
 
 # ======================== 6. AUTRES ALIGNEMENTS ========================
 def align_and_merge_vendors_products():
