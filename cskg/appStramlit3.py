@@ -662,12 +662,15 @@ elif menu == "Simulation de propagation de vulnérabilité":
     if not df.empty:
         G = nx.DiGraph()
         for _, row in df.iterrows():
-            G.add_edge(row["host"], row["cve"])  # Pas de label score ici
+            G.add_edge(row["host"], row["cve"], label="at_risk_of")
 
         plt.figure(figsize=(10, 6))
         pos = nx.spring_layout(G, seed=42)
         nx.draw(G, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=1200, font_size=8)
-        # Pas d’étiquettes sur les arêtes, car pas de score
+
+        edge_labels = {(u, v): d["label"] for u, v, d in G.edges(data=True)}
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red', font_size=9)
+
         st.pyplot(plt)
 
 
