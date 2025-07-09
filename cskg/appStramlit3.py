@@ -45,6 +45,8 @@ menu = st.sidebar.radio("📌 Menu", [
     "CSKG1 – NVD",
     "CSKG2 – Nessus",
     "CSKG3 – Fusionné",
+    "Simulation de propagation de vulnérabilité",
+    "Simulation de risque",
     "Simulation",
     "Recommandation",
   #  "Heatmap"
@@ -637,7 +639,57 @@ elif menu == "Recommandation":
 
     csv_data = df.to_csv(index=False).encode("utf-8")
     st.download_button("⬇️ Télécharger les recommandations CSV", data=csv_data, file_name="recommandations_cyber.csv", mime="text/csv")
-    
+
+
+
+
+
+
+# ======================== PROPAGATION (RotatE) ========================
+elif menu == "Simulation de propagation de vulnérabilité":
+    st.subheader("🔮 Propagation prédite : Relations at_risk_of (RotatE)")
+
+    query = """
+    MATCH (h:Host)-[r:at_risk_of]->(c:CVE)
+    RETURN h.name AS host, c.name AS cve, r.prediction_score AS score
+    ORDER BY score DESC LIMIT 50
+    """
+    df = pd.DataFrame(graph.run(query).data())
+
+    if df.empty:
+        st.warning("Aucune relation at_risk_of trouvée.")
+    else:
+        st.dataframe(df)
+
+        # Graphique de propagation
+        G = nx.DiGraph()
+        for _, row in df.iterrows():
+            G.add_edge(row["host"], row["cve"], label=f"{row['score']:.2f}")
+
+        plt.figure(figsize=(10, 6))
+        pos = nx.spring_layout(G, seed=42)
+        nx.draw(G, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=1200, font_size=8)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels={(u, v): f"{d['label']}" for u, v, d in G.edges(data=True)})
+        st.pyplot(plt)
+
+# ======================== RISQUE (R-GCN) ========================
+elif menu == "Simulation de risque":
+    st.subheader("📊 Hôtes vulnérables prédits : Classification R-GCN")
+
+    query = """
+    MATCH (h:Host) WHERE h.is_vulnerable = true
+    RETURN h.name AS host, h.vulnerability_score AS score
+    ORDER BY score DESC
+    """
+    df_vuln = pd.DataFrame(graph.run(query).data())
+
+    if df_vuln.empty:
+        st.warning("Aucun hôte vulnérable identifié.")
+    else:
+        st.dataframe(df_vuln)
+
+        st.bar_chart(df_vuln.set_index("host"))
+
 st.markdown("---")
 
 st.markdown(
