@@ -654,14 +654,13 @@ elif menu == "Simulation de propagation de vulnérabilité":
     RETURN h.name AS host, c.name AS cve, r.prediction_score AS score
     ORDER BY score DESC LIMIT 50
     """
-    df = pd.DataFrame(graph.run(query).data())
+    df = pd.DataFrame(graph_db.run(query).data())  # ✅ correction ici
 
     if df.empty:
         st.warning("Aucune relation at_risk_of trouvée.")
     else:
         st.dataframe(df)
 
-        # Graphique de propagation
         G = nx.DiGraph()
         for _, row in df.iterrows():
             G.add_edge(row["host"], row["cve"], label=f"{row['score']:.2f}")
@@ -681,14 +680,14 @@ elif menu == "Simulation de risque":
     RETURN h.name AS host, h.vulnerability_score AS score
     ORDER BY score DESC
     """
-    df_vuln = pd.DataFrame(graph.run(query).data())
+    df_vuln = pd.DataFrame(graph_db.run(query).data())  # ✅ correction ici
 
     if df_vuln.empty:
         st.warning("Aucun hôte vulnérable identifié.")
     else:
         st.dataframe(df_vuln)
-
         st.bar_chart(df_vuln.set_index("host"))
+
 
 st.markdown("---")
 
