@@ -659,21 +659,18 @@ elif menu == "Simulation de propagation de vulnérabilité":
     df = pd.DataFrame(graph_db.run(query).data())
     st.dataframe(df)
 
-
-    if df.empty:
-        st.warning("Aucune relation at_risk_of trouvée.")
-    else:
-        st.dataframe(df)
-
+    if not df.empty:
         G = nx.DiGraph()
         for _, row in df.iterrows():
-            G.add_edge(row["host"], row["cve"], label=f"{row['score']:.2f}")
+            G.add_edge(row["host"], row["cve"])  # Pas de label score ici
 
         plt.figure(figsize=(10, 6))
         pos = nx.spring_layout(G, seed=42)
         nx.draw(G, pos, with_labels=True, node_color="lightblue", edge_color="gray", node_size=1200, font_size=8)
-        nx.draw_networkx_edge_labels(G, pos, edge_labels={(u, v): f"{d['label']}" for u, v, d in G.edges(data=True)})
+        # Pas d’étiquettes sur les arêtes, car pas de score
         st.pyplot(plt)
+
+
 
 # ======================== RISQUE (R-GCN) ========================
 elif menu == "Simulation de risque":
