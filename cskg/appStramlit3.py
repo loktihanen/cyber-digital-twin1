@@ -651,11 +651,14 @@ elif menu == "Simulation de propagation de vulnérabilité":
     st.subheader("🔮 Propagation prédite : Relations at_risk_of (RotatE)")
 
     query = """
-    MATCH (h:Host)-[r:at_risk_of]->(c:CVE)
-    RETURN h.name AS host, c.name AS cve, r.prediction_score AS score
-    ORDER BY score DESC LIMIT 50
+    MATCH (h:Host)-[:at_risk_of]->(c:CVE)
+    RETURN h.name AS host, c.name AS cve
+    ORDER BY host
+    LIMIT 50
     """
-    df = pd.DataFrame(graph_db.run(query).data())  # ✅ correction ici
+    df = pd.DataFrame(graph_db.run(query).data())
+    st.dataframe(df)
+
 
     if df.empty:
         st.warning("Aucune relation at_risk_of trouvée.")
